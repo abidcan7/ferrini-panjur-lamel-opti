@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panjur Kesim Optimizasyonu</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --card: #ffffff; --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #1d4ed8; --accent-ink: #ffffff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+    --soft: #eff6ff; --mono: Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { background: #111827; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header .sub { color: #9ca3af; font-size: 13px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 18px 16px 60px; }
+  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+  section.card h2 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+  section.card h2 .n { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; align-items: center; justify-content: center; font-size: 13px; }
+  .drop { border: 2px dashed #c7d2fe; border-radius: 10px; padding: 22px; text-align: center; color: var(--muted); background: var(--soft); cursor: pointer; transition: background .15s; }
+  .drop.over { background: #dbeafe; border-color: var(--accent); }
+  .drop strong { color: var(--accent); }
+  .files { display: grid; gap: 10px; margin-top: 12px; }
+  .file { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; }
+  .file .title { font-weight: 600; }
+  .file .meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; grid-column: 1 / -1; }
+  .file .meta label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .file .meta input { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+  .file .secs { grid-column: 1 / -1; color: var(--muted); font-size: 13px; }
+  .file .warn { grid-column: 1 / -1; color: var(--warn); font-size: 13px; }
+  .file .warn ul { margin: 4px 0 0 18px; padding: 0; }
+  .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 24px; }
+  .params fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 0; min-width: 0; }
+  .params legend { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 0 6px; }
+  .params fieldset.wide { grid-column: 1 / -1; }
+  .mats { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .mats th { text-align: right; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .mats th:nth-child(2), .mats th:nth-child(3) { text-align: left; }
+  .mats td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; white-space: nowrap; }
+  .mats td:nth-child(2), .mats td:nth-child(3) { text-align: left; }
+  .mats tr.off td { color: #9ca3af; }
+  .mats tr.off td.name b { color: #6b7280; }
+  .mats td.name b { font-weight: 600; }
+  .mats td.name .code { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .mats input[type=number] { width: 62px; }
+  .matwrap { overflow-x: auto; }
+  .matfoot { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .wtab { width: 100%; border-collapse: collapse; }
+  .wtab td { padding: 5px 8px 5px 0; vertical-align: top; }
+  .wtab td.wlab { white-space: nowrap; font-weight: 600; }
+  .wtab td.wval { width: 78px; }
+  .wtab td.wdesc { color: var(--muted); font-size: 12px; line-height: 1.35; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .presets button { padding: 5px 10px; font-size: 12.5px; border-color: #d1d5db; background: #fff; }
+  .presets button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .balance { background: var(--soft); border-radius: 8px; padding: 8px 12px; margin-top: 10px; font-size: 13px; }
+  .balance ul { margin: 4px 0 0; padding-left: 18px; }
+  .balance li { margin: 2px 0; }
+  .balance b { font-variant-numeric: tabular-nums; }
+  .balance .warn2 { color: var(--warn); }
+  .cmpbox { margin-top: 10px; overflow-x: auto; }
+  table.cmp2 { border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  table.cmp2 th, table.cmp2 td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+  table.cmp2 th:first-child, table.cmp2 td:first-child { text-align: left; }
+  table.cmp2 tr.cur td { background: var(--soft); font-weight: 600; }
+  table.cmp2 .best { color: var(--ok); font-weight: 700; }
+  .breakdown { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 4px 0; }
+  .row label { display: inline-flex; align-items: center; gap: 6px; }
+  input[type=number] { width: 72px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+  input[type=text], input[type=date] { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+  .hint { color: var(--muted); font-size: 12px; }
+  button { font: inherit; border: 1px solid transparent; border-radius: 8px; padding: 8px 16px; cursor: pointer; background: #e5e7eb; color: var(--ink); }
+  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; padding: 10px 22px; font-size: 15px; }
+  button.primary:disabled { background: #93c5fd; cursor: default; }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  button.ghost { background: transparent; border-color: #d1d5db; }
+  .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+  .progress { display: grid; gap: 6px; margin-top: 12px; }
+  .pbar { height: 10px; background: #e5e7eb; border-radius: 6px; overflow: hidden; }
+  .pbar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+  .pline { display: grid; grid-template-columns: 220px 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tabs button { background: #f3f4f6; border-color: var(--line); }
+  .tabs button.active { background: var(--accent); color: #fff; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .stat { background: var(--soft); border-radius: 8px; padding: 10px 12px; }
+  .stat .v { font-size: 22px; font-weight: 700; }
+  .stat .k { color: var(--muted); font-size: 12px; }
+  .stat .s { color: var(--muted); font-size: 12px; }
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
+  table.g { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.g caption { text-align: left; font-weight: 600; padding: 4px 2px; }
+  table.g caption .m { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  table.g th { text-align: right; color: var(--muted); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  table.g th:first-child, table.g td:first-child { text-align: left; }
+  table.g td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; text-align: right; white-space: nowrap; }
+  table.g td.len { font-weight: 700; font-size: 14px; }
+  table.g td.note { color: var(--muted); font-size: 12px; text-align: left; }
+  table.g tr.sum td { font-weight: 700; border-top: 1px solid var(--line); }
+  table.g tr.kalan td { background: #fffbeb; }
+  .gbox { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: #fff; }
+  .gbox.kalan { border-color: #fcd34d; background: #fffdf5; grid-column: 1 / -1; }
+  details { margin-top: 12px; }
+  details summary { cursor: pointer; color: var(--accent); }
+  .valid { margin: 8px 0; font-size: 13px; }
+  .valid.ok { color: var(--ok); } .valid.bad { color: var(--err); }
+  .err { color: var(--err); }
+  .toast { position: fixed; right: 16px; bottom: 16px; background: #111827; color: #fff; padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .badge { display: inline-block; background: #e5e7eb; border-radius: 999px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
+  .cmp { font-size: 12px; color: var(--muted); }
+  @media print { header, .drop, .params, .actions, .tabs, details { display: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Panjur Kesim Optimizasyonu</h1>
+  <span class="sub">İmalat listesi (CSV / Excel) → demet kesim planı · lamel, dikme, alt parça, tambur · 6500 mm çubuk</span>
+</header>
+<main>
+  <section class="card" id="sec-files">
+    <h2><span class="n">1</span> Dosyalar</h2>
+    <div class="drop" id="drop">
+      İmalat programından gelen <strong>proje dosyalarını</strong> (<code>000000000021542_İmalat.csv</code> gibi) buraya bırakın ya da tıklayıp seçin.
+      <span class="hint">.csv ve .xls/.xlsx okunur · birden fazla proje birlikte optimize edilir</span>
+      <input type="file" id="fileInput" multiple accept=".csv,.xls,.xlsx,.txt" hidden>
+    </div>
+    <div class="files" id="files"></div>
+  </section>
+
+  <section class="card" id="sec-params">
+    <h2><span class="n">2</span> Parametreler</h2>
+    <div class="params">
+      <fieldset>
+        <legend>Çubuk ve testere</legend>
+        <div class="row"><label>Çubuk boyu <input type="number" id="pL" value="6500" step="10"> mm</label> <span class="hint">varsayılan</span></div>
+        <div class="row"><label>Testere payı <input type="number" id="pKerf" value="4" step="0.5"> mm/kesim</label></div>
+        <div class="row"><label>Emniyet payı <input type="number" id="pSafety" value="5" step="1"> mm/çubuk</label></div>
+        <div class="hint">Sığma şartı: Σ ölçü + kesim × testere payı ≤ boy − emniyet</div>
+      </fieldset>
+      <fieldset class="wide">
+        <legend>Öncelik ağırlıkları — neyi ucuz, neyi pahalı sayalım?</legend>
+        <div class="presets" id="presets"></div>
+        <table class="wtab">
+          <tr>
+            <td class="wlab">Kesim</td>
+            <td class="wval"><input type="number" id="wCut" value="10" step="1" min="0"></td>
+            <td class="wdesc">Testerenin her inişi. 50 lameli tek seferde kesmek de 1 kesimdir; asıl işçilik buradadır. Büyütürsen gruplar kalabalıklaşır, toplam kesim azalır.</td>
+          </tr>
+          <tr>
+            <td class="wlab">Çubuk</td>
+            <td class="wval"><input type="number" id="wBar" value="4" step="1" min="0"></td>
+            <td class="wdesc">Kullanılan her tam boy çubuk. Büyütürsen malzeme öne geçer: çubuklar daha dolu kullanılır, fire düşer, kesim sayısı artar.</td>
+          </tr>
+          <tr>
+            <td class="wlab">Demet bozma</td>
+            <td class="wval"><input type="number" id="wChange" value="1" step="1" min="0"></td>
+            <td class="wdesc">Grup içinde adet azalınca çubuk kenara ayırma (ör. 50 → 35). Büyütürsen adetleri birbirine yakın pozlar aynı gruba toplanır.</td>
+          </tr>
+          <tr>
+            <td class="wlab">KALANLAR</td>
+            <td class="wval"><input type="number" id="wKalan" value="3" step="1" min="0"></td>
+            <td class="wdesc">Gruba girmeyip artık parçalardan kesilecek her poz. Büyütürsen KALANLAR listesi kısalır; küçültürsen araç artıkları daha çok değerlendirir.</td>
+          </tr>
+        </table>
+        <div class="balance" id="balance"></div>
+        <div class="cmpbox">
+          <button class="small ghost" id="cmpBtn">Ağırlıkları karşılaştır</button>
+          <span class="hint">En büyük parçada 4 ayarı kısa sürede dener, sonuçları yan yana gösterir.</span>
+          <div id="cmpOut"></div>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Kurallar ve arama</legend>
+        <div class="row"><label><input type="checkbox" id="oMerge" checked> Aynı ölçüdeki pozları tek kesimde birleştir</label></div>
+        <div class="row"><label><input type="checkbox" id="oMulti" checked> Aynı poz aynı grupta birden çok adımda kesilebilir</label></div>
+        <div class="row"><label><input type="checkbox" id="oSplit"> Poz adedi farklı gruplara bölünebilir (deneysel)</label></div>
+        <div class="row"><label>Arama süresi <input type="number" id="pTime" value="12" min="1" max="600"> sn / parça türü</label> <span class="hint" id="parHint"></span></div>
+      </fieldset>
+      <fieldset class="wide">
+        <legend>Parçalar ve demet (tek seferde kesilen adet)</legend>
+        <div id="matList"><span class="hint">Dosya yükleyince bulunan parçalar burada listelenir.</span></div>
+      </fieldset>
+    </div>
+    <div class="actions">
+      <button class="primary" id="runBtn" disabled>Optimize et</button>
+      <button class="ghost" id="stopBtn" hidden>Durdur</button>
+      <span class="hint" id="runHint">Önce dosya yükleyin.</span>
+    </div>
+    <div class="progress" id="progress"></div>
+  </section>
+
+  <section class="card" id="sec-results" hidden>
+    <h2><span class="n">3</span> Sonuç <span class="hint" id="resHint"></span></h2>
+    <div class="actions" style="margin: 0 0 12px">
+      <button class="primary" id="dlBtn">Excel indir</button>
+      <label class="hint"><input type="checkbox" id="oRemnantNote"> Grup notlarına artık demetlerini yaz</label>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <div id="resBody"></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="lib/xlsx.full.min.js" data-inline></script>
+<script src="lib/exceljs.min.js" data-inline></script>
+<script src="optimizer.js" data-inline id="optimizer-src"></script>
+<script src="parser.js" data-inline></script>
+<script src="excel-out.js" data-inline></script>
+<script src="app.js" data-inline></script>
+</body>
+</html>
