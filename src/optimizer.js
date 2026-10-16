@@ -4,15 +4,15 @@
  * Model:
  *   - Bir "grup" bir demetle yapılan sıralı kesimlerdir. Demet, gruptaki en büyük
  *     adımın adediyle başlar (≤ maxBundle) ve her adımda yalnızca küçülür; böylece
- *     her adımda aktif çubukların kalan boyu aynıdır. Küçülürken kenara ayrılan
- *     çubuklar aynı boyda "artık demetleri" oluşturur.
+ *     her adımda aktif boyların kalan boyu aynıdır. Küçülürken kenara ayrılan
+ *     boylar aynı boyda "artık demetleri" oluşturur.
  *   - Adım = (ölçü, adet, hangi pozlara kaç parça). Aynı ölçüdeki pozlar tek adımda
  *     kesilebilir (mergeSameLength); aynı poz aynı grupta birden çok adımda
  *     kesilebilir (multiStep).
- *   - Bir çubuğa sığma şartı: Σ(ölçü + testere payı) ≤ boy − emniyet.
+ *   - Sığma şartı: Σ(ölçü + testere payı) ≤ boy − emniyet.
  *   - KALANLAR: gruba girmeyen pozlar; grupların artık demetlerinden kesilir.
- *     Artık yetmezse eksik yeni çubukla (fallback grupları) karşılanır.
- * Amaç: wCut·kesim + wBar·çubuk + wChange·demet bozma (+ küçük fire cezası).
+ *     Artık yetmezse eksik yeni boyla (fallback grupları) karşılanır.
+ * Amaç: wCut·kesim + wBar·boy + wChange·demet bozma (+ küçük fire cezası).
  *
  * Node ve tarayıcıda çalışır (UMD).
  */
@@ -23,16 +23,16 @@
   'use strict';
 
   const DEFAULTS = Object.freeze({
-    L: 6500,          // çubuk boyu (mm)
+    L: 6500,          // boy uzunluğu (mm)
     kerf: 4,          // testere payı (mm / kesim)
-    safety: 5,        // emniyet payı (mm / çubuk)
+    safety: 5,        // emniyet payı (mm / boy)
     maxBundle: 50,    // tek seferde kesilebilecek en fazla parça
     wCut: 10,         // kesim ağırlığı
-    wBar: 4,          // çubuk ağırlığı
-    wChange: 1,       // demet bozma (çubuk kenara ayırma) ağırlığı
+    wBar: 4,          // boy ağırlığı
+    wChange: 1,       // demet bozma (boy kenara ayırma) ağırlığı
     wWaste: 0.0005,   // fire (mm) eşitlik bozucu
     wKalan: 3,        // KALANLAR'a düşen her poz için artık yönetimi cezası
-    wFill: 3,         // kullanılmayan son kalanları az sayıda çubukta toplamaya yönlendirir (bin-packing sinyali)
+    wFill: 3,         // kullanılmayan son kalanları az sayıda boyda toplamaya yönlendirir (bin-packing sinyali)
     mergeSameLength: true, // aynı ölçüdeki pozları tek kesimde birleştir
     multiStep: true,       // aynı poz aynı grupta birden çok adımda kesilebilir
     allowSplit: false,     // bir pozun adedi farklı gruplara bölünebilir (deneysel)
@@ -238,7 +238,7 @@
     return res;
   }
 
-  /** Artık yetmeyen parçalar için yeni çubuklarla açgözlü gruplama (FFD). */
+  /** Artık yetmeyen parçalar için yeni boylarla açgözlü gruplama (FFD). */
   function fallbackGroups(parts, P) {
     const sorted = parts.slice().sort((a, b) => b.item.len - a.item.len || b.count - a.count);
     const groups = [];
@@ -529,7 +529,7 @@
     const nonEmpty = [];
     for (let i = 0; i < state.groups.length; i++) if (state.groups[i].parts.length) nonEmpty.push(i);
     if (nonEmpty.length < 3) return false;
-    // boşluk (son çubuklardaki kalan × adet + kenara ayrılan artıklar) / çubuk
+    // boşluk (son boylardaki kalan × adet + kenara ayrılan artıklar) / boy
     const slack = gi => { const c = state.groups[gi].comp; let s = 0; for (const r of c.remnants) s += r.count * r.len; return s / c.bars; };
     nonEmpty.sort((a, b) => slack(b) - slack(a));
     const k = 3 + ((rng() * 3) | 0);
@@ -761,7 +761,7 @@
         }
         active = s.n;
         used += s.len + P.kerf;
-        if (used > P.L - P.safety) errors.push(`Grup ${g.no} adım ${i + 1}: çubuk boyu aşıldı (${used} > ${P.L - P.safety})`);
+        if (used > P.L - P.safety) errors.push(`Grup ${g.no} adım ${i + 1}: boy uzunluğu aşıldı (${used} > ${P.L - P.safety})`);
         let c = 0;
         for (const a of s.alloc) { add(a.part, a.count); c += a.count; }
         if (c !== s.n) errors.push(`Grup ${g.no} adım ${i + 1}: dağıtım ${c} ≠ adet ${s.n}`);
@@ -786,13 +786,13 @@
     // artık adet kontrolü: aynı kaynaktan kesilen toplam ilk-adım adedi (türetilmemiş) ≤ kaynak adedi
     const useByKey = new Map();
     for (const e of result.kalan.plan) {
-      if (e.derived) continue; // türetilmiş demetler zaten ana demetten ayrılmış çubuklardır
+      if (e.derived) continue; // türetilmiş demetler zaten ana demetten ayrılmış boylardır
       const key = `${e.groupNo}:${e.step}`;
       useByKey.set(key, (useByKey.get(key) || 0) + e.count);
     }
     for (const [key, used] of useByKey) {
       const b = pool.get(key);
-      if (b && used > b.count) errors.push(`Artık planı ${key}: ${used} çubuk kullanılmış, kaynakta ${b.count} var`);
+      if (b && used > b.count) errors.push(`Artık planı ${key}: ${used} boy kullanılmış, kaynakta ${b.count} var`);
     }
     for (const p of result.parts || []) {
       const got = produced.get(p.id) || 0;
@@ -817,9 +817,9 @@
 
   /**
    * Bir pozun tek bir grupta kesilebilecek en büyük adedi.
-   * Grup = tek demet: bütün adımlar aynı çubuklardan kesilir, yani
-   * adım sayısı × (ölçü + testere payı) çubuğa sığmak zorundadır.
-   * 0 dönerse parça çubuğa hiç sığmıyordur.
+   * Grup = tek demet: bütün adımlar aynı boylardan kesilir, yani
+   * adım sayısı × (ölçü + testere payı) boy uzunluğunu aşmamalıdır.
+   * 0 dönerse parça boydan uzundur.
    */
   function maxCountPerPart(len, P) {
     const cap = P.L - P.safety;
@@ -831,7 +831,7 @@
   /**
    * items → parça listesi.
    *  - ölçüsü/adedi geçersiz satırlar ayıklanır (skipped)
-   *  - çubuktan uzun pozlar ayrı bildirilir (tooLong) — çağıran hata vermelidir
+   *  - boydan uzun pozlar ayrı bildirilir (tooLong) — çağıran hata vermelidir
    *  - tek grupta kesilemeyecek kadar büyük pozlar zorunlu olarak bölünür (forced):
    *    bunlar fiziksel olarak zaten ayrı demetlerdir, birleşik tutmanın karşılığı yoktur
    */
@@ -867,7 +867,7 @@
     P.safety = Math.max(0, Number(P.safety) || 0);
     P.maxBundle = Math.max(1, Math.round(Number(P.maxBundle) || 1));
     if (P.safety >= P.L) {
-      const e = new Error(`Emniyet payı (${P.safety} mm) çubuk boyundan (${P.L} mm) küçük olmalı.`);
+      const e = new Error(`Emniyet payı (${P.safety} mm) boy uzunluğundan (${P.L} mm) küçük olmalı.`);
       e.code = 'BAD_PARAMS'; throw e;
     }
     const rng = mulberry32(P.seed >>> 0);
@@ -875,8 +875,8 @@
     if (prep.tooLong.length) {
       const usable = P.L - P.safety - P.kerf;
       const list = prep.tooLong.slice(0, 5).map(it => `poz ${it.poz} (${it.len} mm)`).join(', ');
-      const e = new Error(`${prep.tooLong.length} poz çubuğa sığmıyor: ${list}${prep.tooLong.length > 5 ? ' …' : ''}. `
-        + `${P.L} mm çubuktan testere (${P.kerf} mm) ve emniyet payı (${P.safety} mm) düşünce en fazla ${usable} mm kesilebilir.`);
+      const e = new Error(`${prep.tooLong.length} poz boydan uzun: ${list}${prep.tooLong.length > 5 ? ' …' : ''}. `
+        + `${P.L} mm boydan testere (${P.kerf} mm) ve emniyet payı (${P.safety} mm) düşünce en fazla ${usable} mm kesilebilir.`);
       e.code = 'TOO_LONG'; e.items = prep.tooLong;
       throw e;
     }

@@ -88,15 +88,15 @@
     const li = [];
     if (w.wBar > 0 && w.wCut > 0) {
       li.push(w.wCut >= w.wBar
-        ? `1 kesimden kaçınmak için en fazla <b>${num(w.wCut / w.wBar)} çubuk</b> fazladan harcanır.`
-        : `1 çubuk kazanmak için en fazla <b>${num(w.wBar / w.wCut)} kesim</b> fazladan yapılır.`);
+        ? `1 kesimden kaçınmak için en fazla <b>${num(w.wCut / w.wBar)} boy</b> fazladan harcanır.`
+        : `1 boy kazanmak için en fazla <b>${num(w.wBar / w.wCut)} kesim</b> fazladan yapılır.`);
     }
-    if (w.wChange > 0 && w.wBar > 0) li.push(`1 çubuk kazanmak için <b>${num(w.wBar / w.wChange)} kez demet bozma</b> göze alınır.`);
+    if (w.wChange > 0 && w.wBar > 0) li.push(`1 boy kazanmak için <b>${num(w.wBar / w.wChange)} kez demet bozma</b> göze alınır.`);
     if (w.wCut > 0) li.push(`Bir pozu KALANLAR'a atmanın bedeli ≈ <b>${num(w.wKalan / w.wCut)} kesim</b> (üstüne artıktan kesim maliyeti de eklenir).`);
     const L = Number($('pL').value) || 6500;
-    if (w.wBar > 0) li.push(`Tam boy bir çubuk (<b>${fmt(L)} mm</b>) ${num(w.wBar)} puan; eşit maliyetli çözümlerde fire az olan seçilir.`);
+    if (w.wBar > 0) li.push(`Tam bir boy (<b>${fmt(L)} mm</b>) ${num(w.wBar)} puan; eşit maliyetli çözümlerde fire az olan seçilir.`);
     const flag = w.wBar > w.wCut ? '<div class="warn2">⚠ Bu ayarda malzeme işçilikten önemli sayılıyor: fire düşer, kesim sayısı artar.</div>'
-      : w.wCut >= 8 * w.wBar ? '<div class="warn2">⚠ Kesim çok baskın: araç fireyi önemsemez, çubuk sayısı artabilir.</div>' : '';
+      : w.wCut >= 8 * w.wBar ? '<div class="warn2">⚠ Kesim çok baskın: araç fireyi önemsemez, boy sayısı artabilir.</div>' : '';
     $('balance').innerHTML = `<b>Şu anki denge</b><ul>${li.map(x => '<li>' + x + '</li>').join('')}</ul>${flag}`;
   }
 
@@ -193,9 +193,9 @@
       </tr>`).join('');
       const unknown = app.mats.filter(m => !m.known).length;
       box.innerHTML = `<div class="matwrap"><table class="mats">
-        <thead><tr><th></th><th>Parça</th><th>Renk</th><th>Poz</th><th>Parça</th><th>Toplam</th><th>Çubuk boyu</th><th>Demet</th></tr></thead>
+        <thead><tr><th></th><th>Parça</th><th>Renk</th><th>Poz</th><th>Parça</th><th>Toplam</th><th>Boy (mm)</th><th>Demet</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
-        <div class="matfoot">İşaretli parçalar optimize edilir; demet = tek seferde kesilen en fazla adet.${unknown ? ' ' + unknown + ' parça tanınmadı — kesilecekse işaretleyip çubuk boyunu girin.' : ''}</div>`;
+        <div class="matfoot">İşaretli parçalar optimize edilir; demet = tek seferde kesilen en fazla adet.${unknown ? ' ' + unknown + ' parça tanınmadı — kesilecekse işaretleyip boy uzunluğunu girin.' : ''}</div>`;
       box.querySelectorAll('input[data-mi]').forEach(inp => inp.addEventListener('change', e => {
         const m = app.mats[Number(e.target.dataset.mi)], k = e.target.dataset.mk;
         m.cfg[k] = k === 'on' ? e.target.checked : Math.max(k === 'L' ? 100 : 1, Math.round(Number(e.target.value) || 0));
@@ -408,7 +408,7 @@
       try {
         const res = await optimizeMaterial(m, P, params.timeMs, paint);
         bar.style.width = '100%';
-        txt.textContent = `tamam · ${fmt(res.stats.bars)} çubuk · ${fmt(res.stats.strokes)} kesim · fire %${(res.stats.wastePct * 100).toFixed(1)}`;
+        txt.textContent = `tamam · ${fmt(res.stats.bars)} boy · ${fmt(res.stats.strokes)} kesim · fire %${(res.stats.wastePct * 100).toFixed(1)}`;
         app.results.push({ mat: m, result: res });
         reportMaterialNotes(m, res);
       } catch (e) {
@@ -419,7 +419,7 @@
         const isFit = e && e.code === 'TOO_LONG';
         addNote('bad', `${m.sheetName}: optimize edilemedi`,
           `<div>${esc(e && e.message || String(e))}</div>`
-          + (isFit ? '<div class="hint" style="margin-top:6px">Çözüm: bu parçanın çubuk boyunu yükseltin ya da bu pozları listeden çıkarın.</div>' : ''));
+          + (isFit ? '<div class="hint" style="margin-top:6px">Çözüm: bu parçanın boy uzunluğunu yükseltin ya da bu pozları listeden çıkarın.</div>' : ''));
       }
     }
     app.running = false; $('runBtn').disabled = false; $('stopBtn').hidden = true;
@@ -440,7 +440,7 @@
     if (fs.length) {
       const list = fs.slice(0, 6).map(f => `poz ${esc(f.item.poz)}: ${f.count} adet → ${f.pieces} demet (en çok ${f.chunk})`);
       addNote('warn', `${m.sheetName}: ${fs.length} poz zorunlu olarak bölündü`,
-        `<div class="hint">Bu pozların adedi tek demette kesilemeyecek kadar büyük (adım sayısı × ölçü çubuğa sığmıyor), bu yüzden ayrı demetlere dağıtıldı.</div>`
+        `<div class="hint">Bu pozların adedi tek demette kesilemeyecek kadar büyük (adım sayısı × ölçü, boy uzunluğunu aşıyor), bu yüzden ayrı demetlere dağıtıldı.</div>`
         + `<ul>${list.map(x => '<li>' + x + '</li>').join('')}</ul>`
         + (fs.length > 6 ? `<div class="hint">… ve ${fs.length - 6} poz daha</div>` : ''));
     }
@@ -515,10 +515,10 @@
     const spanBars = Math.max(...rows.map(r => r.st.bars)) - best.bars;
     const spanCuts = Math.max(...rows.map(r => r.st.strokes)) - best.strokes;
     return `<table class="cmp2">
-      <thead><tr><th>Ayar (kesim/çubuk/bozma/kalan)</th><th>Çubuk</th><th>Kesim</th><th>Demet bozma</th><th>Fire</th><th>Fire (m)</th><th>KALANLAR</th><th></th></tr></thead>
+      <thead><tr><th>Ayar (kesim/boy/bozma/kalan)</th><th>Boy</th><th>Kesim</th><th>Demet bozma</th><th>Fire</th><th>Fire (m)</th><th>KALANLAR</th><th></th></tr></thead>
       <tbody>${body}</tbody></table>
       <div class="hint" style="margin-top:6px">${esc(mat.sheetName)} · ${mat.items.length} poz · ayar başına ${(per / 1000).toFixed(0)} sn arama (tam koşuda sonuçlar biraz daha iyi olur).
-      Uçlar arası fark: <b>${spanCuts} kesim</b> ↔ <b>${spanBars} çubuk</b> (${((spanBars * mat.cfg.L) / 1000).toFixed(0)} m malzeme).</div>`;
+      Uçlar arası fark: <b>${spanCuts} kesim</b> ↔ <b>${spanBars} boy</b> (${((spanBars * mat.cfg.L) / 1000).toFixed(0)} m malzeme).</div>`;
   }
 
   // ---------------------------------------------------------------- sonuç görünümü
@@ -529,12 +529,12 @@
   function renderGroup(g, kalan) {
     const rows = g.steps.map((s, i) => {
       const r = stepCells(s);
-      let note = i === 0 ? `${g.bars} çubuk` : (s.setAside > 0 ? `${s.setAside} çubuk kenara → ${s.n}` : '');
+      let note = i === 0 ? `${g.bars} boy` : (s.setAside > 0 ? `${s.setAside} boy kenara → ${s.n}` : '');
       return `<tr><td>${esc(r.order)}</td><td>${esc(r.customer)}</td><td>${esc(r.poz)}</td><td>${esc(r.count)}</td><td class="len">${fmt(r.len)}</td><td class="note">${esc(note)}</td></tr>`;
     }).join('');
     const rem = (g.remnants || []).filter(r => !r.final && r.count > 0).map(r => `${r.count}×${fmt(r.len)}`).join(', ');
-    const title = g.fallback ? `GRUP ${g.no} <span class="m">artık yetmedi – yeni çubuk</span>` : `GRUP ${g.no}`;
-    return `<div class="gbox"><table class="g"><caption>${title}<span class="m">${g.bars} çubuk · ${g.strokes} kesim${g.changes ? ' · ' + g.changes + ' demet bozma' : ''}</span></caption>
+    const title = g.fallback ? `GRUP ${g.no} <span class="m">artık yetmedi – yeni boy</span>` : `GRUP ${g.no}`;
+    return `<div class="gbox"><table class="g"><caption>${title}<span class="m">${g.bars} boy · ${g.strokes} kesim${g.changes ? ' · ' + g.changes + ' demet bozma' : ''}</span></caption>
       <thead><tr><th>Sipariş</th><th>Müşteri</th><th>POZ</th><th>ADET</th><th>ÖLÇÜ</th><th style="text-align:left">Not</th></tr></thead>
       <tbody>${rows}<tr class="sum"><td colspan="4" style="text-align:left;font-weight:400" class="note">kalan ${fmt(g.leftover)} mm${rem ? ' · artık ' + rem : ''}</td><td class="len">${fmt(g.sumLen)}</td><td></td></tr></tbody></table></div>`;
   }
@@ -548,7 +548,7 @@
       const note = m ? 'artık: ' + [...m.entries()].map(([g, n]) => `G${g} (${n})`).join(' + ') : '';
       return `<tr class="kalan"><td>${esc(p.item.order)}</td><td>${esc(p.item.customer)}</td><td>${esc(p.item.poz)}</td><td>${p.count}</td><td class="len">${fmt(p.item.len)}</td><td class="note">${esc(note)}</td></tr>`;
     }).join('');
-    const def = (k.deficit || []).map(d => `<tr><td colspan="6" class="err">Eksik: poz ${esc(d.item.poz)} × ${d.count} (${fmt(d.item.len)} mm) artıktan çıkmadı → yeni çubuk grubu</td></tr>`).join('');
+    const def = (k.deficit || []).map(d => `<tr><td colspan="6" class="err">Eksik: poz ${esc(d.item.poz)} × ${d.count} (${fmt(d.item.len)} mm) artıktan çıkmadı → yeni boy grubu</td></tr>`).join('');
     return `<div class="gbox kalan"><table class="g"><caption>KALANLAR <span class="m">${k.parts.length} poz · artıklardan ${k.strokes} kesim</span></caption>
       <thead><tr><th>Sipariş</th><th>Müşteri</th><th>POZ</th><th>ADET</th><th>ÖLÇÜ</th><th style="text-align:left">Kaynak</th></tr></thead><tbody>${rows}${def}</tbody></table></div>`;
   }
@@ -573,16 +573,16 @@
     const x = app.results[i], res = x.result, st = res.stats;
     const v = res.validation;
     const stats = [
-      ['Çubuk', st.bars, `alt sınır ${st.lowerBoundBars} · ${(st.bars * res.P.L / 1000).toFixed(0)} m`],
+      ['Boy', st.bars, `alt sınır ${st.lowerBoundBars} · ${(st.bars * res.P.L / 1000).toFixed(0)} m`],
       ['Kesim', st.strokes, `grup ${st.groupStrokes}${st.kalanStrokes ? ' + artık ' + st.kalanStrokes : ''}`],
       ['Fire', (st.wastePct * 100).toFixed(1) + ' %', `${(st.wasteMm / 1000).toFixed(1)} m`],
       ['Demet bozma', st.changes, ''],
       ['Grup', st.groupCount, `${res.items.length} poz · ${fmt(st.pieces)} parça`],
-      ['KALANLAR', st.kalanCount, st.fallbackBars ? `+${st.fallbackBars} yeni çubuk` : 'artıktan'],
+      ['KALANLAR', st.kalanCount, st.fallbackBars ? `+${st.fallbackBars} yeni boy` : 'artıktan'],
     ].map(([k, val, s]) => `<div class="stat"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${s}</div></div>`).join('');
     // Durum rengi tek başına anlam taşımaz: ikon + yazı birlikte verilir
     const valid = `<div class="valid ${v.ok ? 'ok' : 'bad'}"><span class="ico">${v.ok ? '✔' : '✖'}</span><span>${v.ok
-      ? 'Doğrulama tamam — her pozun adedi eksiksiz, hiçbir çubuk boyu aşılmadı, demet sınırı korundu.'
+      ? 'Doğrulama tamam — her pozun adedi eksiksiz, hiçbir boy uzunluğu aşılmadı, demet sınırı korundu.'
       : 'Doğrulama hataları: ' + esc(v.errors.slice(0, 5).join(' | '))}</span></div>`;
     const all = res.groups.concat(res.kalan.fallbackGroups || []);
     // Binlerce satırı tek seferde DOM'a basmak sayfayı kilitler; önce ilk GROUP_PAGE grup
@@ -604,7 +604,7 @@
     if (!c) return '';
     const total = res.stats.cost || 1;
     const parts = [
-      ['kesim', c.cut], ['çubuk', c.bar], ['demet bozma', c.change], ['KALANLAR', c.kalan], ['fire', c.waste],
+      ['kesim', c.cut], ['boy', c.bar], ['demet bozma', c.change], ['KALANLAR', c.kalan], ['fire', c.waste],
     ].filter(([, v]) => Math.abs(v) >= 0.5);
     return 'Maliyet puanının dağılımı: ' + parts.map(([k, v]) => `${k} ${Math.round(v)} <span class="hint">(%${Math.round(100 * v / total)})</span>`).join(' + ')
       + (Math.abs(c.other) >= 0.5 ? ` − doluluk ödülü ${Math.abs(Math.round(c.other))}` : '')

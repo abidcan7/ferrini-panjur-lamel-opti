@@ -15,7 +15,7 @@
 3. **Müşteri adı, tarih ve not** (DETAY/MNB gibi) elle girilir — bu bilgiler dosyada yoktur; bir kez
    girilen bilgiler aynı proje no için hatırlanır ve çıktının sağ üst köşesine yazılır.
 4. **Parçalar ve demet** tablosunda ne kesileceğini seçin. Lamel / dikme / alt parça / tambur
-   otomatik işaretli gelir; fitil ve tanınmayan profiller kapalı gelir. Her parça için çubuk boyu ve
+   otomatik işaretli gelir; fitil ve tanınmayan profiller kapalı gelir. Her parça için boy uzunluğu ve
    demet (tek seferde kesilen en fazla adet) ayrı ayrı ayarlanır ve hatırlanır.
 5. **Optimize et** → her parça için ilerleme; ardından sonuç tabloları. Bir parça
    optimize edilemezse diğerleri yine de çalışır; sebebi "Optimize et"in altındaki
@@ -45,20 +45,20 @@ parçalar (tambur borusu) projeler arasında birleşir.
 ## Kesim modeli
 
 - **Grup** = bir demetle yapılan sıralı kesimler. Demet, gruptaki en büyük adetle başlar (≤ demet
-  sınırı) ve yalnızca **küçülür**; kenara ayrılan çubuklar aynı boyda **artık demetleri** oluşturur.
-- Sığma şartı: `Σ ölçü + kesim sayısı × testere payı ≤ çubuk boyu − emniyet payı`.
+  sınırı) ve yalnızca **küçülür**; kenara ayrılan boylar aynı boyda **artık demetleri** oluşturur.
+- Sığma şartı: `Σ ölçü + kesim sayısı × testere payı ≤ boy uzunluğu − emniyet payı`.
 - Aynı ölçüdeki pozlar tek kesimde birleşir (`6 + 105 | 39 + 11 | 1494`), aynı poz aynı grupta
   birden çok adımda kesilebilir (`34 → 17 + 17`). Bir poz varsayılan olarak tek grupta kalır
   (deneysel "poz bölme" seçeneği kapalı).
 - **KALANLAR**: gruba girmeyen pozlar; grupların artık demetlerinden kesilir. Araç bunun gerçekten
   mümkün olduğunu doğrular ve "ARTIK PLANI" sayfasında hangi artıktan ne kesileceğini yazar.
-- Amaç: `10·kesim + 4·çubuk + 1·demet bozma + 3·KALANLAR pozu` (+ küçük fire cezası).
-- **Sınırlar.** Bir grubun bütün adımları aynı çubuklardan kesilir, yani
-  `adım sayısı × (ölçü + testere payı)` çubuğa sığmak zorundadır. Bir pozun adedi
+- Amaç: `10·kesim + 4·boy + 1·demet bozma + 3·KALANLAR pozu` (+ küçük fire cezası).
+- **Sınırlar.** Bir grubun bütün adımları aynı boylardan kesilir, yani
+  `adım sayısı × (ölçü + testere payı)` boy uzunluğunu aşmamalıdır. Bir pozun adedi
   bu sınırı aşarsa (özellikle demet küçültüldüğünde) poz **zorunlu olarak** ayrı
   demetlere bölünür — fiziksel olarak zaten ayrı demetlerdir — ve bu durum uyarı
-  panelinde poz poz bildirilir. Çubuğa hiç sığmayan bir ölçü varsa araç tahmin
-  yürütmez: hangi pozun kaç mm olduğunu ve o çubuktan en fazla kaç mm kesilebileceğini
+  panelinde poz poz bildirilir. Boydan uzun bir ölçü varsa araç tahmin
+  yürütmez: hangi pozun kaç mm olduğunu ve o boydan en fazla kaç mm kesilebileceğini
   yazıp durur.
 
 ### Öncelik ağırlıkları
@@ -68,22 +68,22 @@ Dört sayı neyin pahalı sayılacağını belirler; önemli olan **oranlarıdı
 | Ağırlık | Ne sayılıyor | Büyütünce |
 |---|---|---|
 | Kesim | Testerenin her inişi (50 lameli tek seferde kesmek de 1 kesim) | Gruplar kalabalıklaşır, toplam kesim azalır |
-| Çubuk | Kullanılan her tam boy çubuk | Çubuklar daha dolu kullanılır, fire düşer, kesim artar |
-| Demet bozma | Grup içinde çubuk kenara ayırma (50 → 35) | Adetleri yakın pozlar aynı gruba toplanır |
+| Boy | Kullanılan her tam boy | Boylar daha dolu kullanılır, fire düşer, kesim artar |
+| Demet bozma | Grup içinde boy kenara ayırma (50 → 35) | Adetleri yakın pozlar aynı gruba toplanır |
 | KALANLAR | Gruba girmeyip artıklardan kesilecek her poz | KALANLAR listesi kısalır |
 
 Arayüz dört hazır ayar sunar (Dengeli 10/4/1/3 · İşçilik öncelikli 30/2/1/3 · Malzeme öncelikli
 4/12/1/3 · KALANLAR olmasın 10/4/1/15), girilen değerleri "1 kesimden kaçınmak için en fazla 2,5
-çubuk harcanır" gibi cümlelere çevirir ve **Ağırlıkları karşılaştır** düğmesiyle en büyük parçayı
+boy harcanır" gibi cümlelere çevirir ve **Ağırlıkları karşılaştır** düğmesiyle en büyük parçayı
 her ayarla kısa süre çözüp sonuçları yan yana koyar. 21542 projesinde (lamel, tam koşu) uçlar:
 
-| Ayar | Çubuk | Kesim | Fire |
+| Ayar | Boy | Kesim | Fire |
 |---|---|---|---|
 | İşçilik öncelikli 30/2 | 1.452 | 148 | %4,0 |
 | Dengeli 10/4 | 1.436 | 156 | %2,9 |
 | Malzeme öncelikli 4/12 | 1.423 | 166 | %2,1 |
 
-Yani uçlar arası fark ≈ 18 kesim ↔ 29 çubuk (≈190 m lamel). Sonuç ekranında maliyetin kalemlere
+Yani uçlar arası fark ≈ 18 kesim ↔ 29 boy (≈190 m lamel). Sonuç ekranında maliyetin kalemlere
 dağılımı da yazılır.
 
 ## Excel çıktısı
@@ -97,7 +97,7 @@ komple satırını kalın uçlu marker ile boyar. Buna göre:
   sonra da okunur. (Zebra gölgelendirme bilerek kullanılmaz: boyanmış satırla karışır.)
 - **ÖLÇÜ** testereye kurulan sayıdır: 18 punto kalın, binlik ayırıcısız (`1894`) — yerel
   ayara göre nokta/virgül karışması olmaz.
-- Grup başlığındaki **ÇUBUK** adedi demet kurulum talimatıdır, iri ve ayrı hücrededir.
+- Grup başlığındaki **BOY** adedi demet kurulum talimatıdır, iri ve ayrı hücrededir.
 - A4 dikey, yan yana iki grup sütunu; bir grup kutusu sayfa ortasından **bölünmez**.
 - Tek proje varsa sipariş/müşteri sayfa başlığına taşınır ve satırlardan kalkar; birden
   fazla proje birleştirilmişse satırda sipariş no durur, müşteri karşılıkları başlıkta
@@ -106,7 +106,7 @@ komple satırını kalın uçlu marker ile boyar. Buna göre:
 | Sayfa | İçerik |
 |---|---|
 | LAMEL / DİKME / ALT PARÇA / TAMBUR … | Kesim listesi: her grup için `# · ÖLÇÜ · POZ · ADET · AÇIKLAMA`, `=SUM` satırı ve kalan boy; sonda KALANLAR. Aynı türden birden fazla renk varsa sayfa adına renk eklenir. |
-| ÖZET | Parça başına çubuk boyu, demet, çubuk, alt sınır, fire %, kesim, demet bozma, grup, KALANLAR; parametreler ve projeler. |
+| ÖZET | Parça başına boy uzunluğu, demet, boy, alt sınır, fire %, kesim, demet bozma, grup, KALANLAR; parametreler ve projeler. |
 | (ofis sayfaları) | ÖZET / POZ LİSTESİ / ARTIK PLANI yatay A4'e sığdırılır, başlık satırı her sayfada tekrar eder. |
 | POZ LİSTESİ | Her pozun hangi grupta kesildiği (filtrelenebilir). |
 | ARTIK PLANI | KALANLAR için artık demeti → kesim eşleşmesi. |
@@ -115,15 +115,15 @@ komple satırını kalın uçlu marker ile boyar. Buna göre:
 
 21542 numaralı proje (156 poz) — `ÖRNEK ÇIKTI - 21542 (araç).xlsx`:
 
-| Parça | Parça adedi | Çubuk | Alt sınır | Fire | Kesim |
+| Parça | Parça adedi | Boy | Alt sınır | Fire | Kesim |
 |---|---|---|---|---|---|
 | Lamel | 5.916 | 1.429 | 1.394 | %2,5 | 154 |
 | Dikme | 312 | 104 | 101 | %3,7 | 156 |
 | Alt parça | 156 | 38 | 37 | %3,3 | 156 |
 | Tambur | 156 | 48 | 44 | %9,1 | 156 |
 
-Elle yapılmış eski örnekle karşılaştırma (3 proje, 158 lamel pozu): insan 962 çubuk / 184 kesim /
-≈%10 fire → araç ≈900 çubuk / ≈130 kesim / ≈%4 fire.
+Elle yapılmış eski örnekle karşılaştırma (3 proje, 158 lamel pozu): insan 962 boy / 184 kesim /
+≈%10 fire → araç ≈900 boy / ≈130 kesim / ≈%4 fire.
 
 ## Geliştirme
 

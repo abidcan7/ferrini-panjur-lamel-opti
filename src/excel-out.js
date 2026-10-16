@@ -7,7 +7,7 @@
  *     çizgi var (darbe komşu satıra taşmasın) ve veri satırlarında hiç zemin
  *     dolgusu / gri yazı yok — boyandıktan sonra da okunabilsin diye yazı koyu.
  *   - ÖLÇÜ testereye kurulan sayıdır: en büyük punto, kalın.
- *   - Grup başlığındaki ÇUBUK adedi demet kurulum talimatıdır: iri ve ayrı hücre.
+ *   - Grup başlığındaki BOY adedi demet kurulum talimatıdır: iri ve ayrı hücre.
  *   - A4 dikey, yan yana iki grup sütunu; bir grup kutusu sayfa ortasından bölünmez.
  *   - Tek proje varsa sipariş/müşteri sayfa başlığına taşınır, satırlardan kalkar;
  *     birden fazla proje varsa satırda yalnız sipariş no durur, müşteri karşılığı
@@ -85,7 +85,7 @@
       const r = stepRow(s);
       rows.push({
         kind: 'step', sira: i + 1, len: r.len, count: r.count, poz: r.poz, order: r.order,
-        note: s.setAside > 0 ? `${s.setAside} çubuk kenara → ${s.n}` : '',
+        note: s.setAside > 0 ? `${s.setAside} boy kenara → ${s.n}` : '',
         setAside: s.setAside > 0,
       });
     });
@@ -181,7 +181,7 @@
           t.alignment = { vertical: 'middle' };
           t.fill = KALAN_FILL;
         } else {
-          // başlık: ilk sütunlar birleşik, en sağda demet (çubuk) adedi
+          // başlık: ilk sütunlar birleşik, en sağda demet (boy) adedi
           ws.mergeCells(r, col(0), r, col(n - 3));
           const t = ws.getCell(r, col(0));
           t.value = row.title;
@@ -190,7 +190,7 @@
           t.fill = HEAD_FILL;
           ws.mergeCells(r, col(n - 2), r, col(n - 1));
           const b = ws.getCell(r, col(n - 2));
-          b.value = `${row.bars} ÇUBUK`;
+          b.value = `${row.bars} BOY`;
           b.font = { name: FONT, size: 15, bold: true };
           b.alignment = { horizontal: 'right', vertical: 'middle' };
           b.fill = HEAD_FILL;
@@ -236,6 +236,7 @@
             vertical: 'middle',
             horizontal: k === 'note' ? 'left' : k === 'poz' ? 'center' : k === 'sira' ? 'center' : 'right',
             wrapText: k === 'note',
+            indent: k === 'count' || k === 'len' ? 1 : 0,   // sayı komşu sütuna değmesin
           };
           // kalın yatay çizgiler: marker darbesi kendi şeridinde kalsın
           c.border = {
@@ -301,7 +302,7 @@
     const st = res.stats;
     ws.mergeCells(3, 1, 3, lastCol);
     const s = ws.getCell(3, 1);
-    s.value = `${st.bars} çubuk × ${res.P.L} mm  ·  ${st.strokes} kesim  ·  ${st.groupCount} grup  ·  demet ${res.P.maxBundle}  ·  testere ${res.P.kerf} mm  ·  fire %${(st.wastePct * 100).toFixed(1).replace('.', ',')}`;
+    s.value = `${st.bars} boy × ${res.P.L} mm  ·  ${st.strokes} kesim  ·  ${st.groupCount} grup  ·  demet ${res.P.maxBundle}  ·  testere ${res.P.kerf} mm  ·  fire %${(st.wastePct * 100).toFixed(1).replace('.', ',')}`;
     s.font = GRAY;
     ws.getRow(3).height = 14;
     ws.getRow(4).height = 6;
@@ -369,7 +370,7 @@
     ws.getCell('A1').value = 'KESİM OPTİMİZASYONU – ÖZET'; ws.getCell('A1').font = { name: FONT, size: 14, bold: true };
     ws.getCell('A2').value = 'Oluşturma: ' + new Date().toLocaleString('tr-TR');
     let r = 4;
-    const hdr = ['Parça', 'Renk', 'Çubuk boyu', 'Demet', 'Poz', 'Parça adedi', 'Toplam (m)', 'Çubuk', 'Alt sınır', 'Fire %', 'Kesim', 'Demet bozma', 'Grup', 'KALANLAR poz', 'Artık kesim', 'Maliyet'];
+    const hdr = ['Parça', 'Renk', 'Boy uzunluğu', 'Demet', 'Poz', 'Parça adedi', 'Toplam (m)', 'Boy', 'Alt sınır', 'Fire %', 'Kesim', 'Demet bozma', 'Grup', 'KALANLAR poz', 'Artık kesim', 'Maliyet'];
     hdr.forEach((h, i) => { const c = ws.getCell(r, i + 1); c.value = h; c.font = { name: FONT, bold: true }; c.border = BORDER; c.alignment = { wrapText: true, vertical: 'middle' }; });
     r++;
     for (const x of results) {
@@ -381,7 +382,7 @@
     r += 2;
     ws.getCell(r, 1).value = 'Parametreler'; ws.getCell(r, 1).font = { name: FONT, bold: true }; r++;
     const P = results.length ? results[0].result.P : {};
-    const plist = [['Testere payı (mm)', P.kerf], ['Emniyet payı (mm)', P.safety], ['Kesim ağırlığı', P.wCut], ['Çubuk ağırlığı', P.wBar], ['Demet bozma ağırlığı', P.wChange], ['KALANLAR poz cezası', P.wKalan], ['Aynı ölçü birleştirme', P.mergeSameLength ? 'açık' : 'kapalı'], ['Poz bölme (gruplar arası)', P.allowSplit ? 'açık' : 'kapalı']];
+    const plist = [['Testere payı (mm)', P.kerf], ['Emniyet payı (mm)', P.safety], ['Kesim ağırlığı', P.wCut], ['Boy ağırlığı', P.wBar], ['Demet bozma ağırlığı', P.wChange], ['KALANLAR poz cezası', P.wKalan], ['Aynı ölçü birleştirme', P.mergeSameLength ? 'açık' : 'kapalı'], ['Poz bölme (gruplar arası)', P.allowSplit ? 'açık' : 'kapalı']];
     for (const [k, v] of plist) { ws.getCell(r, 1).value = k; ws.getCell(r, 2).value = v; r++; }
     r += 1;
     ws.getCell(r, 1).value = 'Siparişler'; ws.getCell(r, 1).font = { name: FONT, bold: true }; r++;

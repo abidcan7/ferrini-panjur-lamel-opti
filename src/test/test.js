@@ -113,26 +113,26 @@
     const g1 = PanjurOpt.makeParts([mk(114, 34, 1844), mk(115, 33, 1844), mk(41, 18, 1394), mk(74, 18, 1384)]);
     const c1 = PanjurOpt.compileGroup(g1, P, null);
     log('compile g1', { n: c1.n, bars: c1.bars, strokes: c1.strokes, changes: c1.changes, perBar: c1.perBar, steps: c1.steps.map(s => [s.len, s.n, s.alloc.map(a => a.part.item.poz + ':' + a.count).join('+')]), remnants: c1.remnants });
-    check(c1.feasible && c1.bars === 34 && c1.strokes === 4 && c1.changes === 2 && c1.perBar === 6482, 'g1 = insan grubu (34 çubuk, 4 kesim, 2 bozma)');
+    check(c1.feasible && c1.bars === 34 && c1.strokes === 4 && c1.changes === 2 && c1.perBar === 6482, 'g1 = insan grubu (34 boy, 4 kesim, 2 bozma)');
     const g2 = PanjurOpt.makeParts([mk(114, 34, 1844), mk(41, 18, 1394), mk(74, 18, 1384)]);
     const c2 = PanjurOpt.compileGroup(g2, P, null);
     log('compile g2', { n: c2.n, bars: c2.bars, strokes: c2.strokes, changes: c2.changes, steps: c2.steps.map(s => [s.len, s.n]) });
-    check(c2.feasible && c2.bars === 18 && c2.strokes === 4, 'g2: 34→17+17 ile 18 çubuk 4 kesim');
+    check(c2.feasible && c2.bars === 18 && c2.strokes === 4, 'g2: 34→17+17 ile 18 boy 4 kesim');
     const g3 = PanjurOpt.makeParts([mk(68, 19, 1349), mk(94, 19, 1349), mk(58, 19, 1344), mk(63, 19, 1344), mk(13, 19, 1084)]);
     const c3 = PanjurOpt.compileGroup(g3, P, null);
     log('compile g3', { n: c3.n, bars: c3.bars, strokes: c3.strokes, changes: c3.changes, steps: c3.steps.map(s => [s.len, s.n, s.alloc.map(a => a.part.item.poz + ':' + a.count).join('+')]) });
     const c3b = PanjurOpt.compileGroup(g3, Object.assign({}, P, { mergeSameLength: false }), null);
-    check(c3b.strokes === 5 && c3b.bars === 19, 'g3 birleştirme kapalı: 5 kesim 19 çubuk');
+    check(c3b.strokes === 5 && c3b.bars === 19, 'g3 birleştirme kapalı: 5 kesim 19 boy');
     const cInf = PanjurOpt.compileGroup(PanjurOpt.makeParts([mk(1, 10, 3300), mk(2, 10, 3200)]), P, null);
     check(!cInf.feasible, 'sığmayan grup → infeasible');
 
     // ------------------------------------------------- gerileme testleri (düzeltilen hatalar)
-    // 1) Çubuktan uzun poz: eskiden sonsuz döngüye girip sekmeyi kilitliyordu
+    // 1) Boydan uzun poz: eskiden sonsuz döngüye girip sekmeyi kilitliyordu
     let tooLongErr = null;
     try { await PanjurOpt.optimize([mk(1, 5, 7000), mk(2, 20, 1200)], P, { iters: 200, yield: false }); }
     catch (e) { tooLongErr = e; }
     check(tooLongErr && tooLongErr.code === 'TOO_LONG' && /poz 1/.test(tooLongErr.message),
-      'çubuktan uzun poz → anlaşılır hata (donma değil): ' + (tooLongErr ? tooLongErr.message.slice(0, 60) : 'hata yok!'));
+      'boydan uzun poz → anlaşılır hata (donma değil): ' + (tooLongErr ? tooLongErr.message.slice(0, 60) : 'hata yok!'));
     // tam sınır: 6500 - 5 emniyet - 4 testere = 6491 sığar
     const edgeOk = await PanjurOpt.optimize([mk(1, 2, 6491), mk(2, 5, 1200)], P, { iters: 200, yield: false });
     check(edgeOk.validation.ok, '6491 mm (tam sınır) kesilebiliyor');
@@ -200,7 +200,7 @@
       check(Math.abs(cp.cut - P.wCut * st.strokes) < 1e-9 && Math.abs(cp.bar - P.wBar * st.bars) < 1e-9, 'döküm kalemleri doğru');
       log('  maliyet dökümü', { cut: Math.round(cp.cut), bar: Math.round(cp.bar), change: Math.round(cp.change), kalan: Math.round(cp.kalan), waste: Math.round(cp.waste), other: Math.round(cp.other) });
       log('  parça sayısı', res.parts.length, '(poz', lamelItems.length + ')');
-      for (const g of (q.get('full') ? res.groups : res.groups.slice(0, 6))) log('  G' + g.no, 'çubuk', g.bars, 'kesim', g.strokes, 'Σ', g.sumLen, 'kalan', g.leftover, 'artık', g.remnants.filter(r => !r.final).map(r => r.count + '×' + r.len).join(','), g.steps.map(s => s.len + '×' + s.n + '[' + s.alloc.map(a => a.item.poz + ':' + a.count).join('+') + ']').join(' | '));
+      for (const g of (q.get('full') ? res.groups : res.groups.slice(0, 6))) log('  G' + g.no, 'boy', g.bars, 'kesim', g.strokes, 'Σ', g.sumLen, 'kalan', g.leftover, 'artık', g.remnants.filter(r => !r.final).map(r => r.count + '×' + r.len).join(','), g.steps.map(s => s.len + '×' + s.n + '[' + s.alloc.map(a => a.item.poz + ':' + a.count).join('+') + ']').join(' | '));
       log('  KALANLAR', res.kalan.parts.map(k => k.item.poz + ':' + k.count + 'x' + k.item.len).join(', '));
       log('  artık planı', (q.get('full') ? res.kalan.plan : res.kalan.plan.slice(0, 5)).map(e => `G${e.groupNo}/${e.step} ${e.count}×${e.len}: ` + e.steps.map(s => s.len + '×' + s.n + '→' + s.item.poz).join(', ')));
       window.__lamel = res;
@@ -215,7 +215,7 @@
       log('OPT dikme:', { iters: res.iterations, ms: Math.round(performance.now() - t0), cost: Math.round(st.cost), bars: st.bars, strokes: st.strokes, changes: st.changes, kalan: st.kalanCount, wastePct: +(st.wastePct * 100).toFixed(2), lb: st.lowerBoundBars, groups: st.groupCount });
       check(res.validation.ok, 'dikme doğrulama: ' + (res.validation.errors.slice(0, 5).join(' | ') || 'temiz'));
       window.__dikme = res;
-      for (const g of res.groups.slice(0, 4)) log('  G' + g.no, 'çubuk', g.bars, 'Σ', g.sumLen, g.steps.map(s => s.len + '×' + s.n + '[' + s.alloc.map(a => a.item.poz + ':' + a.count).join('+') + ']').join(' | '));
+      for (const g of res.groups.slice(0, 4)) log('  G' + g.no, 'boy', g.bars, 'Σ', g.sumLen, g.steps.map(s => s.len + '×' + s.n + '[' + s.alloc.map(a => a.item.poz + ':' + a.count).join('+') + ']').join(' | '));
       log('  dikme kalanlar:', res.groups.map(g => g.leftover).sort((a, b) => b - a).join(' '));
     }
     // ---------------------------------------------------------------- alt parça / tambur (tek sipariş, demet 1)
@@ -239,7 +239,7 @@
       const st = res.stats;
       log('OPT csv/' + m.type + ':', { ms: Math.round(performance.now() - t0), iters: res.iterations, cost: Math.round(st.cost), bars: st.bars, lb: st.lowerBoundBars, strokes: st.strokes, changes: st.changes, kalan: st.kalanCount, wastePct: +(st.wastePct * 100).toFixed(2), groups: st.groupCount, pieces: st.pieces });
       check(res.validation.ok, 'csv/' + m.type + ' doğrulama: ' + (res.validation.errors.slice(0, 5).join(' | ') || 'temiz'));
-      for (const g of res.groups.slice(0, 4)) log('  G' + g.no, 'çubuk', g.bars, 'Σ', g.sumLen, g.steps.map(s => s.len + '×' + s.n + '[' + s.alloc.map(a => a.item.poz + ':' + a.count).join('+') + ']').join(' | '));
+      for (const g of res.groups.slice(0, 4)) log('  G' + g.no, 'boy', g.bars, 'Σ', g.sumLen, g.steps.map(s => s.len + '×' + s.n + '[' + s.alloc.map(a => a.item.poz + ':' + a.count).join('+') + ']').join(' | '));
     }
     // Gerçek ERP projesinden (CSV) örnek Excel: run.sh "csvxlsx=1&iters=300000"
     if (q.get('csvxlsx')) {
