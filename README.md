@@ -17,8 +17,12 @@
 4. **Parçalar ve demet** tablosunda ne kesileceğini seçin. Lamel / dikme / alt parça / tambur
    otomatik işaretli gelir; fitil ve tanınmayan profiller kapalı gelir. Her parça için çubuk boyu ve
    demet (tek seferde kesilen en fazla adet) ayrı ayrı ayarlanır ve hatırlanır.
-5. **Optimize et** → her parça için ilerleme; ardından sonuç tabloları.
+5. **Optimize et** → her parça için ilerleme; ardından sonuç tabloları. Bir parça
+   optimize edilemezse diğerleri yine de çalışır; sebebi "Optimize et"in altındaki
+   uyarı panelinde kalıcı olarak yazar.
 6. **Excel indir** → `MÜŞTERİ KESİM PLANI.xlsx`.
+
+Sağ üstteki düğme temayı değiştirir (sistem → açık → koyu) ve seçimi hatırlar.
 
 ### Dosya biçimleri
 
@@ -49,6 +53,13 @@ parçalar (tambur borusu) projeler arasında birleşir.
 - **KALANLAR**: gruba girmeyen pozlar; grupların artık demetlerinden kesilir. Araç bunun gerçekten
   mümkün olduğunu doğrular ve "ARTIK PLANI" sayfasında hangi artıktan ne kesileceğini yazar.
 - Amaç: `10·kesim + 4·çubuk + 1·demet bozma + 3·KALANLAR pozu` (+ küçük fire cezası).
+- **Sınırlar.** Bir grubun bütün adımları aynı çubuklardan kesilir, yani
+  `adım sayısı × (ölçü + testere payı)` çubuğa sığmak zorundadır. Bir pozun adedi
+  bu sınırı aşarsa (özellikle demet küçültüldüğünde) poz **zorunlu olarak** ayrı
+  demetlere bölünür — fiziksel olarak zaten ayrı demetlerdir — ve bu durum uyarı
+  panelinde poz poz bildirilir. Çubuğa hiç sığmayan bir ölçü varsa araç tahmin
+  yürütmez: hangi pozun kaç mm olduğunu ve o çubuktan en fazla kaç mm kesilebileceğini
+  yazıp durur.
 
 ### Öncelik ağırlıkları
 
@@ -109,6 +120,7 @@ src/
   index.html     arayüz şablonu (geliştirme için; worker ve dosya okuma için http gerekir)
   build.py       tek dosyalık PanjurKesim.html üretir  →  py build.py
   test/run.sh    headless Chrome ile testler  →  bash run.sh "iters=100000"
+                 (Windows / Linux / macOS; tarayıcı CHROME=... ile verilebilir)
                  "xlsx=1" örnek Excel, "csvxlsx=1" CSV projesinden Excel, "only=csv&mat=lamel" tek parça
   test/000000000021999_İmalat.csv   birleştirme testleri için türetilmiş sahte proje
   lib/           xlsx.full.min.js (SheetJS 0.18.5), exceljs.min.js (4.4.0)

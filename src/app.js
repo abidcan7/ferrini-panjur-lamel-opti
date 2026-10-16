@@ -15,6 +15,27 @@
   function fmt(n) { return Number(n).toLocaleString('tr-TR'); }
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* yok say */ } }
+  // Tuş başına localStorage yazmamak için geciktirici
+  function debounce(fn, ms) { let t; return function () { const a = arguments, self = this; clearTimeout(t); t = setTimeout(() => fn.apply(self, a), ms); }; }
+  // Worker'lar saniyede onlarca ilerleme mesajı gönderir; DOM'a kare başına bir kez yazılır
+  function rafThrottle(fn) {
+    let pending = null, scheduled = false;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb => setTimeout(cb, 16));
+    return function () {
+      pending = arguments;
+      if (scheduled) return;
+      scheduled = true;
+      raf(() => { scheduled = false; const a = pending; pending = null; if (a) fn.apply(null, a); });
+    };
+  }
+  // Kalıcı uyarı paneli: geçici bildirimin aksine kullanıcı okuyup işlem yapabilir
+  function clearNotes() { $('runNotes').innerHTML = ''; }
+  function addNote(kind, title, bodyHtml) {
+    const d = document.createElement('div');
+    d.className = 'note-box' + (kind ? ' ' + kind : '');
+    d.innerHTML = '<b>' + esc(title) + '</b>' + (bodyHtml || '');
+    $('runNotes').appendChild(d);
+  }
 
   // ---------------------------------------------------------------- parametreler
   const PARAM_IDS = ['pL', 'pKerf', 'pSafety', 'wCut', 'wBar', 'wChange', 'wKalan', 'pTime'];
@@ -81,11 +102,19 @@
 
   // ---------------------------------------------------------------- dosyalar
   function orderMemory() { return lsGet('panjur.orders', {}); }
+  const ORDER_MEMORY_MAX = 300;
   function rememberOrder(f) {
+    if (!f.orderNo) return;                       // boş anahtar altında biriktirme
     const m = orderMemory();
-    m[f.orderNo] = { customer: f.customer, date: f.date, note: f.note };
+    m[f.orderNo] = { customer: f.customer, date: f.date, note: f.note, at: Date.now() };
+    const keys = Object.keys(m);
+    if (keys.length > ORDER_MEMORY_MAX) {         // en eskileri at, bellek sınırsız büyümesin
+      keys.sort((a, b) => (m[a].at || 0) - (m[b].at || 0));
+      for (const k of keys.slice(0, keys.length - ORDER_MEMORY_MAX)) delete m[k];
+    }
     lsSet('panjur.orders', m);
   }
+  const rememberOrderSoon = debounce(rememberOrder, 500);
 
   async function addFiles(fileList) {
     for (const file of fileList) {
@@ -132,7 +161,7 @@
     box.querySelectorAll('input[data-k]').forEach(inp => inp.addEventListener('input', e => {
       const f = app.files[Number(e.target.dataset.i)];
       f[e.target.dataset.k] = e.target.value.trim();
-      rememberOrder(f);
+      rememberOrderSoon(f);
     }));
     box.querySelectorAll('button[data-rm]').forEach(b => b.addEventListener('click', e => { app.files.splice(Number(e.target.dataset.rm), 1); renderFiles(); }));
     box.querySelectorAll('a[data-toggle]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const ul = $(e.target.dataset.toggle); ul.hidden = !ul.hidden; }));
@@ -179,6 +208,22 @@
     updateRunHint();
   }
 
+  // Müşteri / tarih / not alanları dosya yüklendikten SONRA doldurulur, oysa poz
+  // listesi yükleme anında kopyalanır. Kullanılmadan önce kaynak dosyadan tazelenir;
+  // yoksa kesim listesindeki "Müşteri" sütunu boş çıkar.
+  function refreshItemMeta() {
+    for (const m of app.mats) {
+      for (const it of m.items) {
+        const f = app.files[it.fi];
+        if (f) { it.order = f.orderNo; it.customer = f.customer; }
+      }
+      for (const o of m.orders) {
+        const f = app.files[o.fi];
+        if (f) { o.orderNo = f.orderNo; o.customer = f.customer; o.date = f.date; o.note = f.note; }
+      }
+    }
+  }
+
   function updateRunHint() {
     const on = app.mats.filter(m => m.cfg.on);
     const has = app.files.length > 0 && on.length > 0;
@@ -194,7 +239,8 @@
     const defL = Number($('pL').value) || 6500;
     const saved = matCfgAll();
     const map = new Map();
-    for (const f of app.files) {
+    for (let fi = 0; fi < app.files.length; fi++) {
+      const f = app.files[fi];
       for (const m of f.parsed.materials) {
         let e = map.get(m.key);
         if (!e) {
@@ -204,10 +250,10 @@
         }
         for (const c of m.stokCodes) if (!e.stokCodes.includes(c)) e.stokCodes.push(c);
         for (const it of m.items) {
-          e.items.push({ order: f.orderNo, customer: f.customer, poz: it.poz, len: it.len, count: it.count, stok: it.stok, color: it.color });
+          e.items.push({ fi, order: f.orderNo, customer: f.customer, poz: it.poz, len: it.len, count: it.count, stok: it.stok, color: it.color });
           e.pieces += it.count; e.totalMm += it.count * it.len;
         }
-        e.orders.push({ orderNo: f.orderNo, customer: f.customer, date: f.date, note: f.note, pozCount: m.items.length });
+        e.orders.push({ fi, orderNo: f.orderNo, customer: f.customer, date: f.date, note: f.note, pozCount: m.items.length });
       }
     }
     const arr = [...map.values()];
@@ -242,7 +288,7 @@
       try { const r = await fetch(el.src); if (r.ok) src = await r.text(); } catch (e) { /* file:// altında olabilir */ }
     }
     if (!src) return null;
-    app.workerSrc = src + '\n;let __abort = false; self.onmessage = async function (e) { const d = e.data; if (d && d.type === "abort") { __abort = true; return; } try { const res = await PanjurOpt.optimize(d.items, d.params, { timeMs: d.timeMs, yield: true, chunk: 2000, abort: () => __abort, onProgress: p => self.postMessage({ type: "progress", frac: p.frac, best: p.best, iter: p.iter }) }); self.postMessage({ type: "done", result: res }); } catch (err) { self.postMessage({ type: "error", message: String(err && err.stack || err) }); } };';
+    app.workerSrc = src + '\n;let __abort = false; self.onmessage = async function (e) { const d = e.data; if (d && d.type === "abort") { __abort = true; return; } try { const res = await PanjurOpt.optimize(d.items, d.params, { timeMs: d.timeMs, yield: true, chunk: 2000, abort: () => __abort, onProgress: p => self.postMessage({ type: "progress", frac: p.frac, best: p.best, iter: p.iter }) }); self.postMessage({ type: "done", result: res }); } catch (err) { self.postMessage({ type: "error", message: String(err && err.message || err), code: String(err && err.code || ""), stack: String(err && err.stack || "") }); } };';
     return app.workerSrc;
   }
 
@@ -251,53 +297,81 @@
     return Math.max(1, Math.min(hc - 1, 8));
   }
 
+  // Worker havuzu. Önceden her malzeme için worker'lar yeniden doğuruluyordu;
+  // her doğum optimizer kaynağını baştan ayrıştırmak demek (4 malzeme × 8 worker = 32 kez).
+  // Havuz bir kez kurulur, malzemeler arasında yeniden kullanılır.
+  const pool = { url: null, workers: [] };
+  function destroyPool() {
+    for (const w of pool.workers) { try { w.onmessage = null; w.onerror = null; w.terminate(); } catch (e) { /* yok say */ } }
+    pool.workers = [];
+    if (pool.url) { URL.revokeObjectURL(pool.url); pool.url = null; }
+  }
+  async function ensurePool() {
+    const want = workerCount();
+    if (pool.workers.length === want && pool.url) return pool;
+    const src = await getWorkerSource();
+    if (!src) return null;
+    destroyPool();
+    pool.url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    for (let i = 0; i < want; i++) {
+      try { pool.workers.push(new Worker(pool.url)); }
+      catch (e) { console.error('worker oluşturulamadı', e); break; }
+    }
+    if (!pool.workers.length) { destroyPool(); return null; }
+    return pool;
+  }
+
   // Bir malzemeyi paralel koşularla optimize eder; en iyi sonucu döndürür
   async function optimizeMaterial(mat, P, timeMs, onProgress) {
-    const src = await getWorkerSource();
-    const n = src ? workerCount() : 1;
-    const seeds = Array.from({ length: n }, (_, i) => 1000 + i * 7919 + mat.items.length);
-    if (!src || n === 1) {
+    const seed0 = 1000 + mat.items.length;
+    const p = await ensurePool();
+    if (!p) {
       // ana iş parçacığı (yedek yol)
-      const res = await PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seeds[0] }), { timeMs, chunk: 1000, onProgress: p => onProgress(p.frac, p.best, 1), abort: () => app.abort, material: mat.key });
-      return res;
+      return PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seed0 }),
+        { timeMs, chunk: 1000, onProgress: x => onProgress(x.frac, x.best, 1), abort: () => app.abort, material: mat.key });
     }
+    const workers = p.workers.slice();
+    const n = workers.length;
     return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
-      const workers = [];
       const results = [];
       const fracs = new Array(n).fill(0), bests = new Array(n).fill(Infinity);
-      let done = 0, finished = false;
+      let done = 0, finished = false, broken = false, firstErr = null;
+      let chk = 0, abortSent = false;
+      const settle = i => { fracs[i] = 1; if (++done === n) finish(); };
       const finish = () => {
         if (finished) return;
         finished = true;
         clearInterval(chk);
-        for (const w of workers) w.terminate();
-        URL.revokeObjectURL(url);
-        if (!results.length) { reject(new Error('Arama başarısız (worker)')); return; }
+        for (const w of workers) { w.onmessage = null; w.onerror = null; }
+        if (broken) destroyPool();            // hata almış worker'ı havuzda tutma
+        if (!results.length) { reject(firstErr || new Error('Arama başarısız (worker)')); return; }
         results.sort((a, b) => a.stats.cost - b.stats.cost);
         resolve(results[0]);
       };
-      let abortSent = false;
-      const chk = setInterval(() => {
-        if (app.abort && !abortSent) { abortSent = true; for (const w of workers) w.postMessage({ type: 'abort' }); }
+      chk = setInterval(() => {
+        if (app.abort && !abortSent) { abortSent = true; for (const w of workers) { try { w.postMessage({ type: 'abort' }); } catch (e) { /* yok say */ } } }
       }, 200);
-      for (let i = 0; i < n; i++) {
-        let w;
-        try { w = new Worker(url); } catch (e) { console.error('worker oluşturulamadı', e); break; }
-        workers.push(w);
+      workers.forEach((w, i) => {
         w.onmessage = e => {
           const m = e.data;
-          if (m.type === 'progress') { fracs[i] = m.frac; bests[i] = m.best; onProgress(Math.min(...fracs), Math.min(...bests), n); }
-          else if (m.type === 'done') { results.push(m.result); fracs[i] = 1; done++; if (done === workers.length) finish(); }
-          else if (m.type === 'error') { console.error('worker', m.message); done++; if (done === workers.length) finish(); }
+          if (m.type === 'progress') { fracs[i] = m.frac; bests[i] = m.best; onProgress(Math.min.apply(null, fracs), Math.min.apply(null, bests), n); }
+          else if (m.type === 'done') { results.push(m.result); settle(i); }
+          else if (m.type === 'error') {
+            broken = true;
+            if (!firstErr) { firstErr = new Error(m.message || 'worker hatası'); firstErr.code = m.code || ''; }
+            console.error('worker', m.message, m.stack || '');
+            settle(i);                        // ilerleme çubuğu bu worker'ı beklemesin
+          }
         };
-        w.onerror = err => { console.error('worker hata', err.message); done++; if (done === workers.length) finish(); };
-        w.postMessage({ items: mat.items, params: Object.assign({}, P, { seed: seeds[i] }), timeMs });
-      }
-      if (!workers.length) {
-        clearInterval(chk); finished = true;
-        PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seeds[0] }), { timeMs, chunk: 1000, onProgress: p => onProgress(p.frac, p.best, 1), abort: () => app.abort, material: mat.key }).then(resolve, reject);
-      }
+        w.onerror = err => {
+          broken = true;
+          if (!firstErr) firstErr = new Error((err && err.message) || 'worker hatası');
+          console.error('worker hata', err && err.message);
+          settle(i);
+        };
+        try { w.postMessage({ items: mat.items, params: Object.assign({}, P, { seed: seed0 + i * 7919 }), timeMs }); }
+        catch (e) { broken = true; if (!firstErr) firstErr = e; settle(i); }
+      });
     });
   }
 
@@ -308,36 +382,72 @@
     const params = readParams();
     const mats = app.mats.filter(m => m.cfg.on);
     if (!mats.length) { toast('Optimize edilecek parça seçilmedi.'); return; }
+    refreshItemMeta();
     app.running = true; app.abort = false; app.results = [];
     $('runBtn').disabled = true; $('stopBtn').hidden = false;
     $('sec-results').hidden = true;
+    clearNotes();
     const prog = $('progress'); prog.innerHTML = '';
     const lines = mats.map(m => {
       const div = document.createElement('div'); div.className = 'pline';
-      div.innerHTML = `<div>${esc(m.sheetName)} <span class="hint">${m.items.length} poz · demet ${m.cfg.bundle}</span></div><div class="pbar"><div></div></div><div class="hint">bekliyor</div>`;
+      div.innerHTML = `<div>${esc(m.sheetName)} <span class="hint">${m.items.length} poz · demet ${m.cfg.bundle}</span></div><div class="pbar"><div></div></div><div>bekliyor</div>`;
       prog.appendChild(div); return div;
     });
     const t0 = performance.now();
-    try {
-      for (let i = 0; i < mats.length; i++) {
-        if (app.abort) break;
-        const m = mats[i];
-        const P = { L: m.cfg.L, kerf: params.kerf, safety: params.safety, maxBundle: m.cfg.bundle || 1, wCut: params.wCut, wBar: params.wBar, wChange: params.wChange, wKalan: params.wKalan, mergeSameLength: params.mergeSameLength, multiStep: params.multiStep, allowSplit: params.allowSplit };
-        const bar = lines[i].querySelector('.pbar > div'), txt = lines[i].children[2];
-        const res = await optimizeMaterial(m, P, params.timeMs, (frac, best, n) => { bar.style.width = (frac * 100).toFixed(0) + '%'; txt.textContent = `${(frac * 100).toFixed(0)}% · en iyi maliyet ${isFinite(best) ? Math.round(best) : '–'} · ${n} paralel`; });
+    const failed = [];
+    // Bir malzemedeki hata diğerlerini iptal etmesin: her malzeme kendi try'ında
+    for (let i = 0; i < mats.length; i++) {
+      if (app.abort) { lines[i].children[2].textContent = 'durduruldu'; continue; }
+      const m = mats[i];
+      const P = { L: m.cfg.L, kerf: params.kerf, safety: params.safety, maxBundle: m.cfg.bundle || 1, wCut: params.wCut, wBar: params.wBar, wChange: params.wChange, wKalan: params.wKalan, mergeSameLength: params.mergeSameLength, multiStep: params.multiStep, allowSplit: params.allowSplit };
+      const bar = lines[i].querySelector('.pbar > div'), txt = lines[i].children[2];
+      const paint = rafThrottle((frac, best, n) => {
+        bar.style.width = (frac * 100).toFixed(0) + '%';
+        txt.textContent = `${(frac * 100).toFixed(0)}% · en iyi maliyet ${isFinite(best) ? Math.round(best) : '–'} · ${n} paralel`;
+      });
+      try {
+        const res = await optimizeMaterial(m, P, params.timeMs, paint);
         bar.style.width = '100%';
-        txt.textContent = `tamam · ${res.stats.bars} çubuk · ${res.stats.strokes} kesim · fire %${(res.stats.wastePct * 100).toFixed(1)}`;
+        txt.textContent = `tamam · ${fmt(res.stats.bars)} çubuk · ${fmt(res.stats.strokes)} kesim · fire %${(res.stats.wastePct * 100).toFixed(1)}`;
         app.results.push({ mat: m, result: res });
+        reportMaterialNotes(m, res);
+      } catch (e) {
+        console.error(e);
+        bar.style.width = '0%';
+        txt.textContent = 'yapılamadı';
+        failed.push({ mat: m, err: e });
+        const isFit = e && e.code === 'TOO_LONG';
+        addNote('bad', `${m.sheetName}: optimize edilemedi`,
+          `<div>${esc(e && e.message || String(e))}</div>`
+          + (isFit ? '<div class="hint" style="margin-top:6px">Çözüm: bu parçanın çubuk boyunu yükseltin ya da bu pozları listeden çıkarın.</div>' : ''));
       }
-    } catch (e) {
-      console.error(e); toast('Hata: ' + e.message, 6000);
     }
     app.running = false; $('runBtn').disabled = false; $('stopBtn').hidden = true;
+    updateRunHint();
     if (app.results.length) {
       $('resHint').textContent = `${((performance.now() - t0) / 1000).toFixed(0)} sn`;
       renderResults();
       $('sec-results').hidden = false;
-      $('sec-results').scrollIntoView({ behavior: 'smooth' });
+      if (!failed.length) $('sec-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (failed.length) {
+      toast(`${failed.length} parça optimize edilemedi — ayrıntı için uyarılara bakın.`, 6000);
+    }
+  }
+
+  /** Optimizasyondan sonra kullanıcıyı ilgilendiren durumlar (zorunlu bölme, atlanan satır) */
+  function reportMaterialNotes(m, res) {
+    const fs = res.forcedSplits || [];
+    if (fs.length) {
+      const list = fs.slice(0, 6).map(f => `poz ${esc(f.item.poz)}: ${f.count} adet → ${f.pieces} demet (en çok ${f.chunk})`);
+      addNote('warn', `${m.sheetName}: ${fs.length} poz zorunlu olarak bölündü`,
+        `<div class="hint">Bu pozların adedi tek demette kesilemeyecek kadar büyük (adım sayısı × ölçü çubuğa sığmıyor), bu yüzden ayrı demetlere dağıtıldı.</div>`
+        + `<ul>${list.map(x => '<li>' + x + '</li>').join('')}</ul>`
+        + (fs.length > 6 ? `<div class="hint">… ve ${fs.length - 6} poz daha</div>` : ''));
+    }
+    const sk = res.skipped || [];
+    if (sk.length) {
+      addNote('warn', `${m.sheetName}: ${sk.length} satır ölçüsüz/adetsiz olduğu için atlandı`,
+        `<div class="hint">${esc(sk.slice(0, 8).map(it => 'poz ' + it.poz).join(', '))}${sk.length > 8 ? ' …' : ''}</div>`);
     }
   }
 
@@ -346,6 +456,7 @@
     if (app.running) return;
     const mats = app.mats.filter(m => m.cfg.on);
     if (!mats.length) { toast('Önce dosya yükleyip parça seçin.'); return; }
+    refreshItemMeta();
     const mat = mats.slice().sort((a, b) => b.pieces - a.pieces)[0];
     const params = readParams();
     const cur = currentWeights();
@@ -447,6 +558,7 @@
     return `<details><summary>Artık planı (KALANLAR hangi artıktan kesilir)</summary><table class="g" style="margin-top:8px"><thead><tr><th style="text-align:left">Kaynak</th><th>Artık</th><th style="text-align:left">Kesimler</th><th>Kalan</th></tr></thead><tbody>${rows}</tbody></table></details>`;
   }
   function renderResults() {
+    app.showAllGroups = false; app.shownTab = -1;
     const tabs = $('tabs'); tabs.innerHTML = '';
     app.results.forEach((x, i) => {
       const b = document.createElement('button'); b.textContent = `${x.mat.sheetName}${x.mat.color && !x.mat.sheetName.includes(x.mat.color) ? ' · ' + x.mat.color : ''}`;
@@ -454,7 +566,9 @@
     });
     showResult(0);
   }
+  const GROUP_PAGE = 60;          // tek seferde çizilen en fazla grup
   function showResult(i) {
+    if (app.shownTab !== i) { app.showAllGroups = false; app.shownTab = i; }
     $('tabs').querySelectorAll('button').forEach((b, j) => b.classList.toggle('active', j === i));
     const x = app.results[i], res = x.result, st = res.stats;
     const v = res.validation;
@@ -466,12 +580,23 @@
       ['Grup', st.groupCount, `${res.items.length} poz · ${fmt(st.pieces)} parça`],
       ['KALANLAR', st.kalanCount, st.fallbackBars ? `+${st.fallbackBars} yeni çubuk` : 'artıktan'],
     ].map(([k, val, s]) => `<div class="stat"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${s}</div></div>`).join('');
-    const groups = res.groups.map(g => renderGroup(g)).join('') + (res.kalan.fallbackGroups || []).map(g => renderGroup(g)).join('') + renderKalan(res);
+    // Durum rengi tek başına anlam taşımaz: ikon + yazı birlikte verilir
+    const valid = `<div class="valid ${v.ok ? 'ok' : 'bad'}"><span class="ico">${v.ok ? '✔' : '✖'}</span><span>${v.ok
+      ? 'Doğrulama tamam — her pozun adedi eksiksiz, hiçbir çubuk boyu aşılmadı, demet sınırı korundu.'
+      : 'Doğrulama hataları: ' + esc(v.errors.slice(0, 5).join(' | '))}</span></div>`;
+    const all = res.groups.concat(res.kalan.fallbackGroups || []);
+    // Binlerce satırı tek seferde DOM'a basmak sayfayı kilitler; önce ilk GROUP_PAGE grup
+    const shown = app.showAllGroups ? all.length : Math.min(all.length, GROUP_PAGE);
+    const groups = all.slice(0, shown).map(g => renderGroup(g)).join('') + renderKalan(res);
+    const more = shown < all.length
+      ? `<div class="moregroups"><button class="ghost" id="moreBtn" type="button">Kalan ${fmt(all.length - shown)} grubu da göster</button></div>` : '';
     $('resBody').innerHTML = `<div class="stats">${stats}</div>
-      <div class="valid ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✔ Doğrulama: her pozun adedi tam, hiçbir çubuk boyu aşılmadı, demet sınırı korundu.' : '✖ Doğrulama hataları: ' + esc(v.errors.slice(0, 5).join(' | '))}</div>
-      <div class="cmp">Maliyet ${Math.round(st.cost)} (başlangıç ${Math.round(res.initialCost)}) · ${fmt(res.iterations)} iterasyon · ${esc(x.mat.desc)} ${esc(x.mat.color)}</div>
+      ${valid}
+      <div class="cmp">Maliyet ${fmt(Math.round(st.cost))} (başlangıç ${fmt(Math.round(res.initialCost))}) · ${fmt(res.iterations)} iterasyon · ${esc(x.mat.desc)} ${esc(x.mat.color)}</div>
       <div class="breakdown">${costBreakdown(res)}</div>
-      <div class="groups" style="margin-top:10px">${groups}</div>${renderPlan(res)}`;
+      <div class="groups" style="margin-top:10px">${groups}</div>${more}${renderPlan(res)}`;
+    const mb = $('moreBtn');
+    if (mb) mb.addEventListener('click', () => { app.showAllGroups = true; showResult(i); });
   }
 
   function costBreakdown(res) {
@@ -489,6 +614,7 @@
   // ---------------------------------------------------------------- Excel
   async function downloadExcel() {
     if (!app.results.length) return;
+    refreshItemMeta();
     const showRemnants = $('oRemnantNote').checked;
     const results = app.results.map(x => ({
       result: x.result,
@@ -517,10 +643,32 @@
   }
 
   // ---------------------------------------------------------------- olaylar
+  // Tema: sistem → açık → koyu sırayla döner, seçim hatırlanır
+  function initTheme() {
+    const btn = $('themeBtn');
+    if (!btn) return;
+    const FACE = { auto: ['◐', 'Tema: sistem (tıkla: açık)'], light: ['☀', 'Tema: açık (tıkla: koyu)'], dark: ['☾', 'Tema: koyu (tıkla: sistem)'] };
+    let cur = lsGet('panjur.theme', 'auto');
+    if (!FACE[cur]) cur = 'auto';
+    const apply = () => {
+      if (cur === 'auto') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', cur);
+      btn.textContent = FACE[cur][0];
+      btn.title = FACE[cur][1]; btn.setAttribute('aria-label', FACE[cur][1]);
+    };
+    apply();
+    btn.addEventListener('click', () => {
+      cur = cur === 'auto' ? 'light' : cur === 'light' ? 'dark' : 'auto';
+      lsSet('panjur.theme', cur); apply();
+    });
+  }
+
   function init() {
+    initTheme();
     loadParams();
     const drop = $('drop'), inp = $('fileInput');
     drop.addEventListener('click', () => inp.click());
+    drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
     inp.addEventListener('change', () => { addFiles([...inp.files]); inp.value = ''; });
     ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
     ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));

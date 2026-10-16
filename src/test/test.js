@@ -126,6 +126,44 @@
     const cInf = PanjurOpt.compileGroup(PanjurOpt.makeParts([mk(1, 10, 3300), mk(2, 10, 3200)]), P, null);
     check(!cInf.feasible, 'sığmayan grup → infeasible');
 
+    // ------------------------------------------------- gerileme testleri (düzeltilen hatalar)
+    // 1) Çubuktan uzun poz: eskiden sonsuz döngüye girip sekmeyi kilitliyordu
+    let tooLongErr = null;
+    try { await PanjurOpt.optimize([mk(1, 5, 7000), mk(2, 20, 1200)], P, { iters: 200, yield: false }); }
+    catch (e) { tooLongErr = e; }
+    check(tooLongErr && tooLongErr.code === 'TOO_LONG' && /poz 1/.test(tooLongErr.message),
+      'çubuktan uzun poz → anlaşılır hata (donma değil): ' + (tooLongErr ? tooLongErr.message.slice(0, 60) : 'hata yok!'));
+    // tam sınır: 6500 - 5 emniyet - 4 testere = 6491 sığar
+    const edgeOk = await PanjurOpt.optimize([mk(1, 2, 6491), mk(2, 5, 1200)], P, { iters: 200, yield: false });
+    check(edgeOk.validation.ok, '6491 mm (tam sınır) kesilebiliyor');
+
+    // 2) Adet/ölçü geçersiz satırlar: eskiden TypeError ile çöküyordu
+    const junk = await PanjurOpt.optimize([mk(1, 0, 1200), mk(2, -5, 1300), mk(3, 10, 0), mk(4, 10, 1400)], P, { iters: 200, yield: false });
+    check(junk.validation.ok && junk.skipped.length === 3, 'adet/ölçü geçersiz 3 satır atlandı, çökme yok: ' + junk.skipped.length);
+
+    // 3) LNS hamlesi tam 2 dolu grupla: eskiden sonsuz döngü (küme 3 elemana ulaşamıyordu)
+    const twoGroup = await PanjurOpt.optimize(
+      [mk(1, 40, 3000), mk(2, 40, 3000), mk(3, 40, 2900), mk(4, 40, 2900)],
+      Object.assign({}, P, { pLNS: 1, pElim: 0 }), { iters: 3000, yield: false });
+    check(twoGroup.validation.ok, 'yalnız LNS hamlesiyle 2 gruplu durum donmadan tamamlandı');
+
+    // 4) Demet düşürülünce zorunlu bölme (adet tek demete sığmıyor)
+    const small = await PanjurOpt.optimize([mk(1, 40, 1994), mk(2, 20, 1200)],
+      Object.assign({}, P, { maxBundle: 10 }), { iters: 500, yield: false });
+    check(small.validation.ok, 'demet 10 ile optimize edilebiliyor (eskiden çöküyordu)');
+    check(small.forcedSplits.length >= 1, 'tek demete sığmayan poz zorunlu bölündü ve bildirildi: ' + small.forcedSplits.length);
+    check(PanjurOpt.maxCountPerPart(1994, Object.assign({}, P, { maxBundle: 10 })) === 30,
+      'maxCountPerPart(1994, demet 10) = 3 adım × 10 = 30');
+
+    // 5) Bozuk parametreler güvenli aralığa çekilir
+    const zeroB = await PanjurOpt.optimize([mk(1, 10, 1200), mk(2, 10, 1300)],
+      Object.assign({}, P, { maxBundle: 0 }), { iters: 200, yield: false });
+    check(zeroB.validation.ok && zeroB.P.maxBundle === 1, 'demet 0 → 1 olarak düzeltildi');
+
+    // 6) Türkçe İ: ERP sayfa adı '..._İmalat' regex'le bulunamıyordu
+    check(PanjurParse.norm('000000000021542_İmalat').indexOf('imalat') >= 0,
+      "Türkçe 'İ' normalleştirmesi: _İmalat → imalat");
+
     // insan çözümünün maliyeti (gruplar aynen, KALANLAR)
     function humanStats(hgroups, items, Pm) {
       let bars = 0, strokes = 0, changes = 0; const pool = []; const inGroups = new Set();

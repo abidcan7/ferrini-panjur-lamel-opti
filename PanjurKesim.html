@@ -4,127 +4,371 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Panjur Kesim Optimizasyonu</title>
-<!-- build 2026-10-15 14:49 -->
+<!-- build 2026-10-16 09:59 -->
 <style>
+  /* ---------------------------------------------------------------- tokenlar
+     Açık ve koyu tema ayrı ayrı seçilmiştir (otomatik ters çevirme değil).
+     Koyu değerler iki kapsamda da tanımlı: işletim sistemi ayarı için medya
+     sorgusu, kullanıcının tema düğmesi için data-theme. Düğme her iki yönde
+     de kazanır. */
   :root {
-    --bg: #f3f4f6; --card: #ffffff; --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb;
-    --accent: #1d4ed8; --accent-ink: #ffffff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
-    --soft: #eff6ff; --mono: Consolas, "Courier New", monospace;
+    color-scheme: light;
+    --plane:      #f9f9f7;   /* sayfa zemini */
+    --card:       #fcfcfb;   /* kart yüzeyi */
+    --card-2:     #f3f3f0;   /* iç yüzey (başlık şeridi, kutu) */
+    --ink:        #0b0b0b;
+    --ink-2:      #52514e;
+    --muted:      #898781;
+    --line:       #e1e0d9;
+    --line-2:     #c3c2b7;
+    --ring:       rgba(11, 11, 11, .10);
+    --accent:     #2a78d6;
+    --accent-ink: #ffffff;
+    --accent-soft:#eaf2fc;
+    --good:       #0ca30c;
+    --good-ink:   #006300;   /* açık zeminde okunur yeşil metin */
+    --warn:       #fab219;
+    --warn-ink:   #7a5200;
+    --warn-soft:  #fdf6e6;
+    --crit:       #d03b3b;
+    --crit-ink:   #a81f1f;
+    --shadow:     0 1px 2px rgba(11,11,11,.05), 0 1px 3px rgba(11,11,11,.04);
+    --r:          10px;
+    --r-sm:       7px;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
   }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --plane: #0d0d0d; --card: #1a1a19; --card-2: #232322;
+      --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --line: #2c2c2a; --line-2: #383835; --ring: rgba(255,255,255,.10);
+      --accent: #3987e5; --accent-ink: #0d0d0d; --accent-soft: #16263a;
+      --good: #0ca30c; --good-ink: #4cc24c;
+      --warn: #fab219; --warn-ink: #f0c25a; --warn-soft: #2a2317;
+      --crit: #d03b3b; --crit-ink: #ef7676;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane: #0d0d0d; --card: #1a1a19; --card-2: #232322;
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --line: #2c2c2a; --line-2: #383835; --ring: rgba(255,255,255,.10);
+    --accent: #3987e5; --accent-ink: #0d0d0d; --accent-soft: #16263a;
+    --good: #0ca30c; --good-ink: #4cc24c;
+    --warn: #fab219; --warn-ink: #f0c25a; --warn-soft: #2a2317;
+    --crit: #d03b3b; --crit-ink: #ef7676;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
-  header { background: #111827; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  header .sub { color: #9ca3af; font-size: 13px; }
-  main { max-width: 1240px; margin: 0 auto; padding: 18px 16px 60px; }
-  section.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
-  section.card h2 { margin: 0 0 12px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
-  section.card h2 .n { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; align-items: center; justify-content: center; font-size: 13px; }
-  .drop { border: 2px dashed #c7d2fe; border-radius: 10px; padding: 22px; text-align: center; color: var(--muted); background: var(--soft); cursor: pointer; transition: background .15s; }
-  .drop.over { background: #dbeafe; border-color: var(--accent); }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--plane); color: var(--ink);
+    font: 14px/1.5 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------------------------------------------------------------- başlık */
+  header {
+    background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 12px 20px; display: flex; align-items: center; gap: 8px 18px; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 20;
+  }
+  header h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); font-size: 12.5px; flex: 1 1 320px; min-width: 0; }
+  #themeBtn {
+    margin-left: auto; width: 34px; height: 34px; padding: 0; flex: none;
+    display: inline-grid; place-items: center; font-size: 15px; line-height: 1;
+    background: transparent; border: 1px solid var(--line); color: var(--ink-2);
+  }
+  #themeBtn:hover { background: var(--card-2); color: var(--ink); }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 18px 16px 72px; }
+
+  /* ---------------------------------------------------------------- kart */
+  section.card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+    box-shadow: var(--shadow); padding: 16px 18px 18px; margin-bottom: 16px;
+  }
+  section.card > h2 {
+    margin: 0 0 14px; font-size: 14.5px; font-weight: 650; letter-spacing: -.005em;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  section.card > h2 .n {
+    display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none;
+    border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+    font-size: 12px; font-weight: 700;
+  }
+
+  /* ---------------------------------------------------------------- dosya bırakma */
+  .drop {
+    border: 1.5px dashed var(--line-2); border-radius: var(--r); padding: 20px 18px;
+    text-align: center; color: var(--ink-2); background: var(--card-2);
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .drop:hover { border-color: var(--accent); }
+  .drop.over { background: var(--accent-soft); border-color: var(--accent); border-style: solid; }
   .drop strong { color: var(--accent); }
+  .drop code { font-family: var(--mono); font-size: 12px; background: var(--card); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); }
+  .drop .hint { display: block; margin-top: 6px; }
+
   .files { display: grid; gap: 10px; margin-top: 12px; }
-  .file { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; }
-  .file .title { font-weight: 600; }
-  .file .meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; grid-column: 1 / -1; }
-  .file .meta label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
-  .file .meta input { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
-  .file .secs { grid-column: 1 / -1; color: var(--muted); font-size: 13px; }
-  .file .warn { grid-column: 1 / -1; color: var(--warn); font-size: 13px; }
-  .file .warn ul { margin: 4px 0 0 18px; padding: 0; }
-  .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 24px; }
-  .params fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; margin: 0; min-width: 0; }
-  .params legend { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; padding: 0 6px; }
+  .file {
+    border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: var(--r-sm); padding: 11px 13px; background: var(--card);
+    display: grid; grid-template-columns: 1fr auto; gap: 9px 14px;
+  }
+  .file .title { font-weight: 650; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; min-width: 0; }
+  .file .meta { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; grid-column: 1 / -1; }
+  .file .meta label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
+  .file .secs { grid-column: 1 / -1; color: var(--ink-2); font-size: 12.5px; }
+  .file .warn { grid-column: 1 / -1; color: var(--warn-ink); font-size: 12.5px; background: var(--warn-soft);
+                border: 1px solid var(--line); border-radius: var(--r-sm); padding: 7px 10px; }
+  .file .warn a { color: inherit; }
+  .file .warn ul { margin: 6px 0 0 18px; padding: 0; }
+  .file .warn li { margin: 2px 0; }
+
+  /* ---------------------------------------------------------------- form */
+  .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .params fieldset {
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    padding: 12px 14px 14px; margin: 0; min-width: 0; background: var(--card);
+  }
+  .params legend {
+    color: var(--muted); font-size: 11px; font-weight: 650; text-transform: uppercase;
+    letter-spacing: .06em; padding: 0 7px;
+  }
   .params fieldset.wide { grid-column: 1 / -1; }
-  .mats { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .mats th { text-align: right; color: var(--muted); font-weight: 600; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  .mats th:nth-child(2), .mats th:nth-child(3) { text-align: left; }
-  .mats td { padding: 4px 8px; border-bottom: 1px solid #f1f5f9; text-align: right; white-space: nowrap; }
-  .mats td:nth-child(2), .mats td:nth-child(3) { text-align: left; }
-  .mats tr.off td { color: #9ca3af; }
-  .mats tr.off td.name b { color: #6b7280; }
-  .mats td.name b { font-weight: 600; }
-  .mats td.name .code { color: var(--muted); font-size: 11px; font-family: var(--mono); }
-  .mats input[type=number] { width: 62px; }
-  .matwrap { overflow-x: auto; }
-  .matfoot { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .wtab { width: 100%; border-collapse: collapse; }
-  .wtab td { padding: 5px 8px 5px 0; vertical-align: top; }
-  .wtab td.wlab { white-space: nowrap; font-weight: 600; }
-  .wtab td.wval { width: 78px; }
-  .wtab td.wdesc { color: var(--muted); font-size: 12px; line-height: 1.35; }
-  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .presets button { padding: 5px 10px; font-size: 12.5px; border-color: #d1d5db; background: #fff; }
-  .presets button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .balance { background: var(--soft); border-radius: 8px; padding: 8px 12px; margin-top: 10px; font-size: 13px; }
-  .balance ul { margin: 4px 0 0; padding-left: 18px; }
-  .balance li { margin: 2px 0; }
-  .balance b { font-variant-numeric: tabular-nums; }
-  .balance .warn2 { color: var(--warn); }
-  .cmpbox { margin-top: 10px; overflow-x: auto; }
-  table.cmp2 { border-collapse: collapse; font-size: 13px; margin-top: 8px; }
-  table.cmp2 th, table.cmp2 td { padding: 4px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
-  table.cmp2 th:first-child, table.cmp2 td:first-child { text-align: left; }
-  table.cmp2 tr.cur td { background: var(--soft); font-weight: 600; }
-  table.cmp2 .best { color: var(--ok); font-weight: 700; }
-  .breakdown { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 4px 0; }
-  .row label { display: inline-flex; align-items: center; gap: 6px; }
-  input[type=number] { width: 72px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
-  input[type=text], input[type=date] { padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 6px; font: inherit; }
+
+  label { color: inherit; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 7px 0; }
+  .row label { display: inline-flex; align-items: center; gap: 7px; }
   .hint { color: var(--muted); font-size: 12px; }
-  button { font: inherit; border: 1px solid transparent; border-radius: 8px; padding: 8px 16px; cursor: pointer; background: #e5e7eb; color: var(--ink); }
-  button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; padding: 10px 22px; font-size: 15px; }
-  button.primary:disabled { background: #93c5fd; cursor: default; }
-  button.small { padding: 4px 10px; font-size: 13px; }
-  button.ghost { background: transparent; border-color: #d1d5db; }
-  .actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
-  .progress { display: grid; gap: 6px; margin-top: 12px; }
-  .pbar { height: 10px; background: #e5e7eb; border-radius: 6px; overflow: hidden; }
-  .pbar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s; }
-  .pline { display: grid; grid-template-columns: 220px 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
-  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .tabs button { background: #f3f4f6; border-color: var(--line); }
-  .tabs button.active { background: var(--accent); color: #fff; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
-  .stat { background: var(--soft); border-radius: 8px; padding: 10px 12px; }
-  .stat .v { font-size: 22px; font-weight: 700; }
-  .stat .k { color: var(--muted); font-size: 12px; }
-  .stat .s { color: var(--muted); font-size: 12px; }
-  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
-  table.g { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.g caption { text-align: left; font-weight: 600; padding: 4px 2px; }
-  table.g caption .m { color: var(--muted); font-weight: 400; margin-left: 8px; }
-  table.g th { text-align: right; color: var(--muted); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+
+  input[type=number], input[type=text], input[type=date] {
+    padding: 6px 8px; border: 1px solid var(--line-2); border-radius: var(--r-sm);
+    font: inherit; font-variant-numeric: tabular-nums;
+    background: var(--card); color: var(--ink); min-height: 32px;
+  }
+  input[type=number] { width: 78px; }
+  input[type=text], input[type=date] { font-variant-numeric: normal; }
+  input:hover { border-color: var(--muted); }
+  input:focus-visible, button:focus-visible, summary:focus-visible, .drop:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-color: var(--accent);
+  }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; flex: none; }
+
+  button {
+    font: inherit; border: 1px solid var(--line-2); border-radius: var(--r-sm);
+    padding: 7px 14px; min-height: 34px; cursor: pointer;
+    background: var(--card); color: var(--ink);
+    transition: background .12s, border-color .12s, box-shadow .12s;
+  }
+  button:hover:not(:disabled) { background: var(--card-2); border-color: var(--muted); }
+  button:active:not(:disabled) { transform: translateY(.5px); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary {
+    background: var(--accent); color: var(--accent-ink); border-color: transparent;
+    font-weight: 650; padding: 9px 20px; min-height: 40px; font-size: 14.5px;
+  }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); border-color: transparent; }
+  button.small { padding: 4px 10px; min-height: 28px; font-size: 12.5px; }
+  button.ghost { background: transparent; }
+
+  /* ---------------------------------------------------------------- ağırlıklar */
+  .presets { display: flex; flex-wrap: wrap; gap: 0; margin-bottom: 12px; border: 1px solid var(--line-2); border-radius: var(--r-sm); overflow: hidden; width: fit-content; max-width: 100%; }
+  .presets button {
+    border: 0; border-right: 1px solid var(--line-2); border-radius: 0;
+    padding: 7px 12px; min-height: 34px; font-size: 12.5px; background: var(--card);
+  }
+  .presets button:last-child { border-right: 0; }
+  .presets button.on { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+  .presets button.on .hint { color: var(--accent-ink); opacity: .8; }
+
+  .wtab { width: 100%; border-collapse: collapse; }
+  .wtab td { padding: 7px 10px 7px 0; vertical-align: top; border-top: 1px solid var(--line); }
+  .wtab tr:first-child td { border-top: 0; }
+  .wtab td.wlab { white-space: nowrap; font-weight: 650; width: 1%; }
+  .wtab td.wval { width: 90px; }
+  .wtab td.wdesc { color: var(--ink-2); font-size: 12.5px; line-height: 1.45; }
+
+  .balance {
+    background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+    padding: 10px 13px; margin-top: 12px; font-size: 12.5px;
+  }
+  .balance ul { margin: 6px 0 0; padding-left: 18px; }
+  .balance li { margin: 3px 0; color: var(--ink-2); }
+  .balance b { font-variant-numeric: tabular-nums; color: var(--ink); }
+  .balance .warn2 { color: var(--warn-ink); margin-top: 8px; font-weight: 500; }
+
+  .cmpbox { margin-top: 12px; }
+  .cmpbox > .hint { margin-left: 8px; }
+  #cmpOut { overflow-x: auto; margin-top: 8px; }
+
+  /* ---------------------------------------------------------------- tablolar */
+  table.mats, table.cmp2, table.g {
+    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px;
+  }
+  table.mats th, table.cmp2 th, table.g th {
+    text-align: right; color: var(--muted); font-weight: 650; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 7px 9px; background: var(--card-2);
+    border-bottom: 1px solid var(--line-2); white-space: nowrap;
+  }
+  table.mats td, table.cmp2 td, table.g td {
+    padding: 7px 9px; border-bottom: 1px solid var(--line);
+    text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  table.mats tbody tr:last-child td, table.cmp2 tbody tr:last-child td { border-bottom: 0; }
+  table.mats tbody tr:hover td, table.cmp2 tbody tr:hover td { background: var(--card-2); }
+
+  .matwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-sm); }
+  .mats th:nth-child(2), .mats th:nth-child(3), .mats td:nth-child(2), .mats td:nth-child(3) { text-align: left; }
+  .mats td:nth-child(2), .mats td:nth-child(3) { font-variant-numeric: normal; }
+  .mats td:first-child, .mats th:first-child { width: 1%; padding-right: 0; }
+  .mats tr.off td { color: var(--muted); }
+  .mats tr.off td.name b { color: var(--muted); font-weight: 500; }
+  .mats td.name b { font-weight: 650; }
+  .mats td.name .code { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .mats input[type=number] { width: 68px; }
+  .matfoot { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  table.cmp2 { width: auto; min-width: 100%; }
+  table.cmp2 th:first-child, table.cmp2 td:first-child { text-align: left; font-variant-numeric: normal; }
+  table.cmp2 tr.cur td { background: var(--accent-soft); font-weight: 650; }
+  table.cmp2 tr.cur:hover td { background: var(--accent-soft); }
+  table.cmp2 .best { color: var(--good-ink); font-weight: 700; }
+
+  /* ---------------------------------------------------------------- çalıştırma */
+  .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+  .actions .hint { flex: 1 1 200px; }
+  .progress { display: grid; gap: 8px; margin-top: 14px; }
+  .pline {
+    display: grid; grid-template-columns: minmax(140px, 220px) 1fr minmax(170px, auto);
+    gap: 12px; align-items: center; font-size: 12.5px;
+  }
+  .pline > div:last-child { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+  .pbar { height: 7px; background: var(--card-2); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .pbar > div { height: 100%; background: var(--accent); width: 0; transition: width .2s linear; }
+
+  /* kalıcı uyarı / hata paneli (geçici bildirimin aksine kullanıcı okuyup işlem yapabilir) */
+  .notes { display: grid; gap: 8px; margin-top: 14px; }
+  .note-box {
+    border: 1px solid var(--line); border-left: 3px solid var(--muted);
+    border-radius: var(--r-sm); padding: 10px 13px; font-size: 13px; background: var(--card-2);
+  }
+  .note-box.bad  { border-left-color: var(--crit); color: var(--crit-ink); background: var(--card); }
+  .note-box.warn { border-left-color: var(--warn); color: var(--warn-ink); background: var(--warn-soft); }
+  .note-box b { display: block; margin-bottom: 3px; color: inherit; }
+  .note-box ul { margin: 6px 0 0 18px; padding: 0; }
+
+  /* ---------------------------------------------------------------- sonuç */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tabs button { background: var(--card); font-size: 13px; }
+  .tabs button.active { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 650; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(146px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--card-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 11px 13px; }
+  .stat .k { color: var(--muted); font-size: 11.5px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+  /* büyük tek değerler oransal rakamla yazılır; tabular-nums yalnızca sütunlarda */
+  .stat .v { font-size: 25px; font-weight: 650; line-height: 1.15; margin: 3px 0 1px; letter-spacing: -.02em; }
+  .stat .s { color: var(--ink-2); font-size: 12px; }
+
+  .valid { margin: 10px 0; font-size: 13px; display: flex; align-items: flex-start; gap: 8px;
+           border: 1px solid var(--line); border-radius: var(--r-sm); padding: 9px 12px; background: var(--card-2); }
+  /* durum rengi hiçbir zaman tek başına anlam taşımaz: ikon + etiket birlikte */
+  .valid .ico { flex: none; font-weight: 700; }
+  .valid.ok { color: var(--good-ink); }
+  .valid.ok .ico { color: var(--good-ink); }
+  .valid.bad { color: var(--crit-ink); border-left: 3px solid var(--crit); }
+  .cmp { color: var(--muted); font-size: 12px; }
+  .breakdown { color: var(--ink-2); font-size: 12.5px; margin-top: 5px; }
+  .err { color: var(--crit-ink); }
+
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 12px; margin-top: 12px; }
+  .gbox {
+    border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--card);
+    box-shadow: var(--shadow); overflow-x: auto;   /* not sütunu kırpılmasın */
+  }
+  .gbox.kalan { border-left: 3px solid var(--warn); grid-column: 1 / -1; }
+  /* caption tablo-başlığı olarak kalmalı: display:flex yerleşimi bozar */
+  table.g caption {
+    text-align: left; font-weight: 650; padding: 9px 11px; background: var(--card-2);
+    border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  table.g caption .m {
+    color: var(--muted); font-weight: 500; font-size: 12px;
+    font-variant-numeric: tabular-nums; margin-left: 10px;
+  }
+  table.g th { text-transform: none; letter-spacing: 0; font-size: 11px; padding: 5px 9px; background: var(--card); }
   table.g th:first-child, table.g td:first-child { text-align: left; }
-  table.g td { padding: 3px 6px; border-bottom: 1px solid #f1f5f9; text-align: right; white-space: nowrap; }
-  table.g td.len { font-weight: 700; font-size: 14px; }
-  table.g td.note { color: var(--muted); font-size: 12px; text-align: left; }
-  table.g tr.sum td { font-weight: 700; border-top: 1px solid var(--line); }
-  table.g tr.kalan td { background: #fffbeb; }
-  .gbox { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: #fff; }
-  .gbox.kalan { border-color: #fcd34d; background: #fffdf5; grid-column: 1 / -1; }
-  details { margin-top: 12px; }
-  details summary { cursor: pointer; color: var(--accent); }
-  .valid { margin: 8px 0; font-size: 13px; }
-  .valid.ok { color: var(--ok); } .valid.bad { color: var(--err); }
-  .err { color: var(--err); }
-  .toast { position: fixed; right: 16px; bottom: 16px; background: #111827; color: #fff; padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
-  .toast.show { opacity: 1; }
-  .badge { display: inline-block; background: #e5e7eb; border-radius: 999px; padding: 1px 8px; font-size: 12px; color: var(--muted); }
-  .cmp { font-size: 12px; color: var(--muted); }
-  @media print { header, .drop, .params, .actions, .tabs, details { display: none !important; } }
+  table.g td { padding: 5px 9px; }
+  table.g tbody tr:hover td { background: var(--card-2); }
+  table.g td.len { font-weight: 700; font-size: 14.5px; }
+  table.g td.note { color: var(--muted); font-size: 11.5px; text-align: left; white-space: normal; font-variant-numeric: normal; min-width: 76px; }
+  /* uzun müşteri adı not sütununu ezmesin */
+  table.g td:nth-child(2) { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+  table.g tr.sum td { font-weight: 700; border-top: 1px solid var(--line-2); border-bottom: 0; background: var(--card-2); }
+  table.g tr.kalan td { background: var(--warn-soft); }
+  table.g tr.kalan:hover td { background: var(--warn-soft); }
+  .moregroups { margin-top: 12px; text-align: center; }
+
+  details { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 13px; background: var(--card); }
+  details summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px; }
+  details[open] summary { margin-bottom: 8px; }
+  details .matwrap, details table.g { margin-top: 8px; }
+
+  .badge {
+    display: inline-block; background: var(--card-2); border: 1px solid var(--line);
+    border-radius: 99px; padding: 1px 8px; font-size: 11.5px; color: var(--ink-2);
+    font-variant-numeric: normal; white-space: nowrap;
+  }
+
+  .toast {
+    position: fixed; right: 16px; bottom: 16px; max-width: min(440px, calc(100vw - 32px));
+    background: var(--ink); color: var(--plane); padding: 11px 15px; border-radius: var(--r-sm);
+    box-shadow: 0 4px 14px rgba(0,0,0,.2); opacity: 0; transform: translateY(6px);
+    transition: opacity .2s, transform .2s; pointer-events: none; z-index: 60; font-size: 13px;
+  }
+  .toast.show { opacity: 1; transform: none; }
+
+  @media (max-width: 620px) {
+    .pline { grid-template-columns: 1fr; gap: 5px; }
+    .pline > div:last-child { text-align: left; }
+    .groups { grid-template-columns: 1fr; }
+  }
+
+  /* ---------------------------------------------------------------- baskı
+     Usta kesim listesini kağıttan okur: ekran süsü çıkmaz, zemin beyaz,
+     grup kutuları sayfa ortasından bölünmez. */
+  @media print {
+    :root { --plane: #fff; --card: #fff; --card-2: #fff; --ink: #000; --ink-2: #000;
+            --muted: #444; --line: #999; --line-2: #666; --shadow: none; }
+    body { font-size: 11pt; }
+    header, .drop, .files, .params, .actions, .tabs, .progress, .notes, details, .toast, #themeBtn, .moregroups { display: none !important; }
+    main { max-width: none; padding: 0; }
+    section.card { border: 0; box-shadow: none; padding: 0; margin: 0; }
+    section.card > h2 { display: none; }
+    .stats { display: none; }
+    .groups { display: block; }
+    .gbox { break-inside: avoid; page-break-inside: avoid; margin: 0 0 8pt; border: 1px solid #999; box-shadow: none; }
+    .valid { border: 0; padding: 0; margin: 0 0 6pt; }
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>Panjur Kesim Optimizasyonu</h1>
-  <span class="sub">İmalat listesi (CSV / Excel) → demet kesim planı · lamel, dikme, alt parça, tambur · 6500 mm çubuk</span>
+  <span class="sub">İmalat listesi (CSV / Excel) → demet kesim planı · lamel, dikme, alt parça, tambur</span>
+  <button id="themeBtn" type="button" title="Açık / koyu tema" aria-label="Açık / koyu tema">◐</button>
 </header>
 <main>
   <section class="card" id="sec-files">
     <h2><span class="n">1</span> Dosyalar</h2>
-    <div class="drop" id="drop">
+    <div class="drop" id="drop" tabindex="0" role="button" aria-label="Proje dosyası seç">
       İmalat programından gelen <strong>proje dosyalarını</strong> (<code>000000000021542_İmalat.csv</code> gibi) buraya bırakın ya da tıklayıp seçin.
       <span class="hint">.csv ve .xls/.xlsx okunur · birden fazla proje birlikte optimize edilir</span>
       <input type="file" id="fileInput" multiple accept=".csv,.xls,.xlsx,.txt" hidden>
@@ -137,9 +381,9 @@
     <div class="params">
       <fieldset>
         <legend>Çubuk ve testere</legend>
-        <div class="row"><label>Çubuk boyu <input type="number" id="pL" value="6500" step="10"> mm</label> <span class="hint">varsayılan</span></div>
-        <div class="row"><label>Testere payı <input type="number" id="pKerf" value="4" step="0.5"> mm/kesim</label></div>
-        <div class="row"><label>Emniyet payı <input type="number" id="pSafety" value="5" step="1"> mm/çubuk</label></div>
+        <div class="row"><label>Çubuk boyu <input type="number" id="pL" value="6500" step="10" min="100"> mm</label> <span class="hint">varsayılan</span></div>
+        <div class="row"><label>Testere payı <input type="number" id="pKerf" value="4" step="0.5" min="0"> mm/kesim</label></div>
+        <div class="row"><label>Emniyet payı <input type="number" id="pSafety" value="5" step="1" min="0"> mm/çubuk</label></div>
         <div class="hint">Sığma şartı: Σ ölçü + kesim × testere payı ≤ boy − emniyet</div>
       </fieldset>
       <fieldset class="wide">
@@ -169,7 +413,7 @@
         </table>
         <div class="balance" id="balance"></div>
         <div class="cmpbox">
-          <button class="small ghost" id="cmpBtn">Ağırlıkları karşılaştır</button>
+          <button class="small ghost" id="cmpBtn" type="button">Ağırlıkları karşılaştır</button>
           <span class="hint">En büyük parçada 4 ayarı kısa sürede dener, sonuçları yan yana gösterir.</span>
           <div id="cmpOut"></div>
         </div>
@@ -187,24 +431,25 @@
       </fieldset>
     </div>
     <div class="actions">
-      <button class="primary" id="runBtn" disabled>Optimize et</button>
-      <button class="ghost" id="stopBtn" hidden>Durdur</button>
+      <button class="primary" id="runBtn" type="button" disabled>Optimize et</button>
+      <button class="ghost" id="stopBtn" type="button" hidden>Durdur</button>
       <span class="hint" id="runHint">Önce dosya yükleyin.</span>
     </div>
     <div class="progress" id="progress"></div>
+    <div class="notes" id="runNotes"></div>
   </section>
 
   <section class="card" id="sec-results" hidden>
     <h2><span class="n">3</span> Sonuç <span class="hint" id="resHint"></span></h2>
-    <div class="actions" style="margin: 0 0 12px">
-      <button class="primary" id="dlBtn">Excel indir</button>
+    <div class="actions" style="margin: 0 0 14px">
+      <button class="primary" id="dlBtn" type="button">Excel indir</button>
       <label class="hint"><input type="checkbox" id="oRemnantNote"> Grup notlarına artık demetlerini yaz</label>
     </div>
     <div class="tabs" id="tabs"></div>
     <div id="resBody"></div>
   </section>
 </main>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 /*! xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com */
@@ -335,6 +580,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   const INFEASIBLE = Object.freeze({ feasible: false, cost: Infinity, steps: [], bars: 0, strokes: 0, changes: 0, remnants: [], perBar: Infinity, cands: [] });
   const EMPTY = Object.freeze({ feasible: true, cost: 0, steps: [], bars: 0, strokes: 0, changes: 0, remnants: [], perBar: 0, leftover: 0, n: 0, cands: [] });
+  // evaluate() sığmayan bir durumda da bu şekli döndürür; böylece buildResult hiçbir alanı eksik bulmaz
+  const NO_KALAN = Object.freeze({ plan: [], strokes: 0, changes: 0, deficit: [], usedMm: 0, fallback: null, cost: 0 });
+  const INFEASIBLE_EVAL = Object.freeze({ cost: Infinity, bars: 0, strokes: 0, changes: 0, kp: NO_KALAN, groupBars: 0, groupStrokes: 0, groupChanges: 0, infeasible: true });
 
   // ---------------------------------------------------------------- grup derleyici
 
@@ -412,6 +660,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         steps.push({ len: k.len, n: c, alloc });
       }
     }
+    if (!steps.length) return null;          // adedi 0 olan anahtar: adım üretilemez
     steps.sort((a, b) => b.n - a.n || b.len - a.len);
     const bars = steps[0].n;
     let changes = 0, used = 0;
@@ -574,7 +823,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const g = this.groups[gi];
         if (g.parts.length === 0) continue;
         const c = g.comp;
-        if (!c.feasible) return { cost: Infinity };
+        if (!c.feasible) return INFEASIBLE_EVAL;
         cost += c.cost; bars += c.bars; strokes += c.strokes; changes += c.changes;
         for (const r of c.remnants) if (r.count > 0 && r.len > 0) pool.push({ count: r.count, len: r.len, group: gi, step: r.afterStep });
       }
@@ -750,7 +999,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       chosen.add(worst);
     }
-    while (chosen.size < k) chosen.add(nonEmpty[(rng() * nonEmpty.length) | 0]);
+    // küme en çok nonEmpty.length ayrı değer tutabilir; kıskaç olmazsa sonsuz döngü
+    const kk = Math.min(k, nonEmpty.length);
+    while (chosen.size < kk) chosen.add(nonEmpty[(rng() * nonEmpty.length) | 0]);
     const released = [];
     for (const gi of chosen) {
       const g = state.groups[gi];
@@ -919,6 +1170,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const sib = parts.filter(x => x !== p && x.item === p.item);
         if (!sib.length) return false;
         const q = sib[(rng() * sib.length) | 0];
+        // birleşince tek grupta kesilemeyecek kadar büyürse birleştirme
+        if (p.count + q.count > maxCountPerPart(p.item.len, P)) return false;
         const from = state.loc.get(q.id);
         const to = state.loc.get(p.id);
         remember(from); remember(to);
@@ -947,9 +1200,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const order = [];
     for (let gi = 0; gi < state.groups.length; gi++) if (state.groups[gi].parts.length) order.push(gi);
     // sıralama: demet büyükten küçüğe, sonra ilk adım ölçüsü uzundan kısaya
+    const firstLen = c => (c.steps.length ? c.steps[0].len : 0);   // sığmayan grupta adım yoktur
     order.sort((a, b) => {
       const ca = state.groups[a].comp, cb = state.groups[b].comp;
-      return cb.bars - ca.bars || cb.steps[0].len - ca.steps[0].len || a - b;
+      return cb.bars - ca.bars || firstLen(cb) - firstLen(ca) || a - b;
     });
     const gIndexOf = new Map();
     order.forEach((gi, i) => gIndexOf.set(gi, i + 1));
@@ -1088,14 +1342,71 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   /**
+   * Bir pozun tek bir grupta kesilebilecek en büyük adedi.
+   * Grup = tek demet: bütün adımlar aynı çubuklardan kesilir, yani
+   * adım sayısı × (ölçü + testere payı) çubuğa sığmak zorundadır.
+   * 0 dönerse parça çubuğa hiç sığmıyordur.
+   */
+  function maxCountPerPart(len, P) {
+    const cap = P.L - P.safety;
+    if (!(len > 0) || len + P.kerf > cap) return 0;
+    const maxSteps = Math.floor(cap / (len + P.kerf));          // ≥ 1
+    return P.multiStep ? maxSteps * P.maxBundle : P.maxBundle;
+  }
+
+  /**
+   * items → parça listesi.
+   *  - ölçüsü/adedi geçersiz satırlar ayıklanır (skipped)
+   *  - çubuktan uzun pozlar ayrı bildirilir (tooLong) — çağıran hata vermelidir
+   *  - tek grupta kesilemeyecek kadar büyük pozlar zorunlu olarak bölünür (forced):
+   *    bunlar fiziksel olarak zaten ayrı demetlerdir, birleşik tutmanın karşılığı yoktur
+   */
+  function prepareParts(items, P) {
+    const parts = [], skipped = [], tooLong = [], forced = [];
+    let id = 1;
+    for (const it of items) {
+      const len = Math.round(Number(it.len));
+      const count = Math.round(Number(it.count));
+      if (!isFinite(len) || len <= 0 || !isFinite(count) || count <= 0) { skipped.push(it); continue; }
+      const maxCount = maxCountPerPart(len, P);
+      if (!maxCount) { tooLong.push(it); continue; }
+      if (count > maxCount) forced.push({ item: it, count, chunk: maxCount, pieces: Math.ceil(count / maxCount) });
+      for (let left = count; left > 0;) {
+        const take = Math.min(left, maxCount);
+        parts.push({ id: id++, item: it, count: take });
+        left -= take;
+      }
+    }
+    return { parts, skipped, tooLong, forced };
+  }
+
+  /**
    * items: [{order, customer, poz, len, count, ...}]
    * opts: { iters, timeMs, onProgress(info), chunk }
    */
   async function optimize(items, params, opts) {
     const P = Object.assign({}, DEFAULTS, params || {});
     opts = opts || {};
+    // parametreleri güvenli aralığa çek — bozuk değer sessiz donma/çökme üretmesin
+    P.L = Math.max(1, Math.round(Number(P.L) || DEFAULTS.L));
+    P.kerf = Math.max(0, Number(P.kerf) || 0);
+    P.safety = Math.max(0, Number(P.safety) || 0);
+    P.maxBundle = Math.max(1, Math.round(Number(P.maxBundle) || 1));
+    if (P.safety >= P.L) {
+      const e = new Error(`Emniyet payı (${P.safety} mm) çubuk boyundan (${P.L} mm) küçük olmalı.`);
+      e.code = 'BAD_PARAMS'; throw e;
+    }
     const rng = mulberry32(P.seed >>> 0);
-    const parts = makeParts(items);
+    const prep = prepareParts(items, P);
+    if (prep.tooLong.length) {
+      const usable = P.L - P.safety - P.kerf;
+      const list = prep.tooLong.slice(0, 5).map(it => `poz ${it.poz} (${it.len} mm)`).join(', ');
+      const e = new Error(`${prep.tooLong.length} poz çubuğa sığmıyor: ${list}${prep.tooLong.length > 5 ? ' …' : ''}. `
+        + `${P.L} mm çubuktan testere (${P.kerf} mm) ve emniyet payı (${P.safety} mm) düşünce en fazla ${usable} mm kesilebilir.`);
+      e.code = 'TOO_LONG'; e.items = prep.tooLong;
+      throw e;
+    }
+    const parts = prep.parts;
     const state = new State(parts, P, rng);
     state.nextPartId = parts.length + 1;
     constructInitial(state);
@@ -1134,11 +1445,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     result.items = items;
     result.initialCost = init.cost;
     result.iterations = it;
+    result.skipped = prep.skipped;          // ölçüsü/adedi geçersiz satırlar
+    result.forcedSplits = prep.forced;      // demete sığmadığı için bölünmek zorunda kalan pozlar
     result.validation = validate(result);
     return result;
   }
 
-  return { DEFAULTS, compileGroup, planKalan, optimize, validate, makeParts, mulberry32, State, constructInitial, buildResult, KALAN };
+  return { DEFAULTS, compileGroup, planKalan, optimize, validate, makeParts, prepareParts, maxCountPerPart, mulberry32, State, constructInitial, buildResult, KALAN };
 });
 
 </script>
@@ -1427,7 +1740,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   function parseWorkbook(wb, fileName) {
-    const sheetName = wb.SheetNames.find(n => /maliyet|imalat/i.test(n)) || wb.SheetNames[0];
+    // Türkçe 'İ' JS'de /i/i ile eşleşmez (İ.toUpperCase() !== I), bu yüzden norm() ile bakılır:
+    // '000000000021542_İmalat' sayfası düz regex'le bulunamıyordu.
+    const sheetName = wb.SheetNames.find(n => /maliyet|imalat/.test(norm(n))) || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
     return fromRows(rows, { sheetName, fileName: fileName || '', orderNo: orderNoFrom(sheetName, fileName) });
@@ -1753,6 +2068,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function fmt(n) { return Number(n).toLocaleString('tr-TR'); }
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* yok say */ } }
+  // Tuş başına localStorage yazmamak için geciktirici
+  function debounce(fn, ms) { let t; return function () { const a = arguments, self = this; clearTimeout(t); t = setTimeout(() => fn.apply(self, a), ms); }; }
+  // Worker'lar saniyede onlarca ilerleme mesajı gönderir; DOM'a kare başına bir kez yazılır
+  function rafThrottle(fn) {
+    let pending = null, scheduled = false;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb => setTimeout(cb, 16));
+    return function () {
+      pending = arguments;
+      if (scheduled) return;
+      scheduled = true;
+      raf(() => { scheduled = false; const a = pending; pending = null; if (a) fn.apply(null, a); });
+    };
+  }
+  // Kalıcı uyarı paneli: geçici bildirimin aksine kullanıcı okuyup işlem yapabilir
+  function clearNotes() { $('runNotes').innerHTML = ''; }
+  function addNote(kind, title, bodyHtml) {
+    const d = document.createElement('div');
+    d.className = 'note-box' + (kind ? ' ' + kind : '');
+    d.innerHTML = '<b>' + esc(title) + '</b>' + (bodyHtml || '');
+    $('runNotes').appendChild(d);
+  }
 
   // ---------------------------------------------------------------- parametreler
   const PARAM_IDS = ['pL', 'pKerf', 'pSafety', 'wCut', 'wBar', 'wChange', 'wKalan', 'pTime'];
@@ -1819,11 +2155,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   // ---------------------------------------------------------------- dosyalar
   function orderMemory() { return lsGet('panjur.orders', {}); }
+  const ORDER_MEMORY_MAX = 300;
   function rememberOrder(f) {
+    if (!f.orderNo) return;                       // boş anahtar altında biriktirme
     const m = orderMemory();
-    m[f.orderNo] = { customer: f.customer, date: f.date, note: f.note };
+    m[f.orderNo] = { customer: f.customer, date: f.date, note: f.note, at: Date.now() };
+    const keys = Object.keys(m);
+    if (keys.length > ORDER_MEMORY_MAX) {         // en eskileri at, bellek sınırsız büyümesin
+      keys.sort((a, b) => (m[a].at || 0) - (m[b].at || 0));
+      for (const k of keys.slice(0, keys.length - ORDER_MEMORY_MAX)) delete m[k];
+    }
     lsSet('panjur.orders', m);
   }
+  const rememberOrderSoon = debounce(rememberOrder, 500);
 
   async function addFiles(fileList) {
     for (const file of fileList) {
@@ -1870,7 +2214,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     box.querySelectorAll('input[data-k]').forEach(inp => inp.addEventListener('input', e => {
       const f = app.files[Number(e.target.dataset.i)];
       f[e.target.dataset.k] = e.target.value.trim();
-      rememberOrder(f);
+      rememberOrderSoon(f);
     }));
     box.querySelectorAll('button[data-rm]').forEach(b => b.addEventListener('click', e => { app.files.splice(Number(e.target.dataset.rm), 1); renderFiles(); }));
     box.querySelectorAll('a[data-toggle]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const ul = $(e.target.dataset.toggle); ul.hidden = !ul.hidden; }));
@@ -1917,6 +2261,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     updateRunHint();
   }
 
+  // Müşteri / tarih / not alanları dosya yüklendikten SONRA doldurulur, oysa poz
+  // listesi yükleme anında kopyalanır. Kullanılmadan önce kaynak dosyadan tazelenir;
+  // yoksa kesim listesindeki "Müşteri" sütunu boş çıkar.
+  function refreshItemMeta() {
+    for (const m of app.mats) {
+      for (const it of m.items) {
+        const f = app.files[it.fi];
+        if (f) { it.order = f.orderNo; it.customer = f.customer; }
+      }
+      for (const o of m.orders) {
+        const f = app.files[o.fi];
+        if (f) { o.orderNo = f.orderNo; o.customer = f.customer; o.date = f.date; o.note = f.note; }
+      }
+    }
+  }
+
   function updateRunHint() {
     const on = app.mats.filter(m => m.cfg.on);
     const has = app.files.length > 0 && on.length > 0;
@@ -1932,7 +2292,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const defL = Number($('pL').value) || 6500;
     const saved = matCfgAll();
     const map = new Map();
-    for (const f of app.files) {
+    for (let fi = 0; fi < app.files.length; fi++) {
+      const f = app.files[fi];
       for (const m of f.parsed.materials) {
         let e = map.get(m.key);
         if (!e) {
@@ -1942,10 +2303,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         for (const c of m.stokCodes) if (!e.stokCodes.includes(c)) e.stokCodes.push(c);
         for (const it of m.items) {
-          e.items.push({ order: f.orderNo, customer: f.customer, poz: it.poz, len: it.len, count: it.count, stok: it.stok, color: it.color });
+          e.items.push({ fi, order: f.orderNo, customer: f.customer, poz: it.poz, len: it.len, count: it.count, stok: it.stok, color: it.color });
           e.pieces += it.count; e.totalMm += it.count * it.len;
         }
-        e.orders.push({ orderNo: f.orderNo, customer: f.customer, date: f.date, note: f.note, pozCount: m.items.length });
+        e.orders.push({ fi, orderNo: f.orderNo, customer: f.customer, date: f.date, note: f.note, pozCount: m.items.length });
       }
     }
     const arr = [...map.values()];
@@ -1980,7 +2341,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       try { const r = await fetch(el.src); if (r.ok) src = await r.text(); } catch (e) { /* file:// altında olabilir */ }
     }
     if (!src) return null;
-    app.workerSrc = src + '\n;let __abort = false; self.onmessage = async function (e) { const d = e.data; if (d && d.type === "abort") { __abort = true; return; } try { const res = await PanjurOpt.optimize(d.items, d.params, { timeMs: d.timeMs, yield: true, chunk: 2000, abort: () => __abort, onProgress: p => self.postMessage({ type: "progress", frac: p.frac, best: p.best, iter: p.iter }) }); self.postMessage({ type: "done", result: res }); } catch (err) { self.postMessage({ type: "error", message: String(err && err.stack || err) }); } };';
+    app.workerSrc = src + '\n;let __abort = false; self.onmessage = async function (e) { const d = e.data; if (d && d.type === "abort") { __abort = true; return; } try { const res = await PanjurOpt.optimize(d.items, d.params, { timeMs: d.timeMs, yield: true, chunk: 2000, abort: () => __abort, onProgress: p => self.postMessage({ type: "progress", frac: p.frac, best: p.best, iter: p.iter }) }); self.postMessage({ type: "done", result: res }); } catch (err) { self.postMessage({ type: "error", message: String(err && err.message || err), code: String(err && err.code || ""), stack: String(err && err.stack || "") }); } };';
     return app.workerSrc;
   }
 
@@ -1989,53 +2350,81 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return Math.max(1, Math.min(hc - 1, 8));
   }
 
+  // Worker havuzu. Önceden her malzeme için worker'lar yeniden doğuruluyordu;
+  // her doğum optimizer kaynağını baştan ayrıştırmak demek (4 malzeme × 8 worker = 32 kez).
+  // Havuz bir kez kurulur, malzemeler arasında yeniden kullanılır.
+  const pool = { url: null, workers: [] };
+  function destroyPool() {
+    for (const w of pool.workers) { try { w.onmessage = null; w.onerror = null; w.terminate(); } catch (e) { /* yok say */ } }
+    pool.workers = [];
+    if (pool.url) { URL.revokeObjectURL(pool.url); pool.url = null; }
+  }
+  async function ensurePool() {
+    const want = workerCount();
+    if (pool.workers.length === want && pool.url) return pool;
+    const src = await getWorkerSource();
+    if (!src) return null;
+    destroyPool();
+    pool.url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    for (let i = 0; i < want; i++) {
+      try { pool.workers.push(new Worker(pool.url)); }
+      catch (e) { console.error('worker oluşturulamadı', e); break; }
+    }
+    if (!pool.workers.length) { destroyPool(); return null; }
+    return pool;
+  }
+
   // Bir malzemeyi paralel koşularla optimize eder; en iyi sonucu döndürür
   async function optimizeMaterial(mat, P, timeMs, onProgress) {
-    const src = await getWorkerSource();
-    const n = src ? workerCount() : 1;
-    const seeds = Array.from({ length: n }, (_, i) => 1000 + i * 7919 + mat.items.length);
-    if (!src || n === 1) {
+    const seed0 = 1000 + mat.items.length;
+    const p = await ensurePool();
+    if (!p) {
       // ana iş parçacığı (yedek yol)
-      const res = await PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seeds[0] }), { timeMs, chunk: 1000, onProgress: p => onProgress(p.frac, p.best, 1), abort: () => app.abort, material: mat.key });
-      return res;
+      return PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seed0 }),
+        { timeMs, chunk: 1000, onProgress: x => onProgress(x.frac, x.best, 1), abort: () => app.abort, material: mat.key });
     }
+    const workers = p.workers.slice();
+    const n = workers.length;
     return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
-      const workers = [];
       const results = [];
       const fracs = new Array(n).fill(0), bests = new Array(n).fill(Infinity);
-      let done = 0, finished = false;
+      let done = 0, finished = false, broken = false, firstErr = null;
+      let chk = 0, abortSent = false;
+      const settle = i => { fracs[i] = 1; if (++done === n) finish(); };
       const finish = () => {
         if (finished) return;
         finished = true;
         clearInterval(chk);
-        for (const w of workers) w.terminate();
-        URL.revokeObjectURL(url);
-        if (!results.length) { reject(new Error('Arama başarısız (worker)')); return; }
+        for (const w of workers) { w.onmessage = null; w.onerror = null; }
+        if (broken) destroyPool();            // hata almış worker'ı havuzda tutma
+        if (!results.length) { reject(firstErr || new Error('Arama başarısız (worker)')); return; }
         results.sort((a, b) => a.stats.cost - b.stats.cost);
         resolve(results[0]);
       };
-      let abortSent = false;
-      const chk = setInterval(() => {
-        if (app.abort && !abortSent) { abortSent = true; for (const w of workers) w.postMessage({ type: 'abort' }); }
+      chk = setInterval(() => {
+        if (app.abort && !abortSent) { abortSent = true; for (const w of workers) { try { w.postMessage({ type: 'abort' }); } catch (e) { /* yok say */ } } }
       }, 200);
-      for (let i = 0; i < n; i++) {
-        let w;
-        try { w = new Worker(url); } catch (e) { console.error('worker oluşturulamadı', e); break; }
-        workers.push(w);
+      workers.forEach((w, i) => {
         w.onmessage = e => {
           const m = e.data;
-          if (m.type === 'progress') { fracs[i] = m.frac; bests[i] = m.best; onProgress(Math.min(...fracs), Math.min(...bests), n); }
-          else if (m.type === 'done') { results.push(m.result); fracs[i] = 1; done++; if (done === workers.length) finish(); }
-          else if (m.type === 'error') { console.error('worker', m.message); done++; if (done === workers.length) finish(); }
+          if (m.type === 'progress') { fracs[i] = m.frac; bests[i] = m.best; onProgress(Math.min.apply(null, fracs), Math.min.apply(null, bests), n); }
+          else if (m.type === 'done') { results.push(m.result); settle(i); }
+          else if (m.type === 'error') {
+            broken = true;
+            if (!firstErr) { firstErr = new Error(m.message || 'worker hatası'); firstErr.code = m.code || ''; }
+            console.error('worker', m.message, m.stack || '');
+            settle(i);                        // ilerleme çubuğu bu worker'ı beklemesin
+          }
         };
-        w.onerror = err => { console.error('worker hata', err.message); done++; if (done === workers.length) finish(); };
-        w.postMessage({ items: mat.items, params: Object.assign({}, P, { seed: seeds[i] }), timeMs });
-      }
-      if (!workers.length) {
-        clearInterval(chk); finished = true;
-        PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seeds[0] }), { timeMs, chunk: 1000, onProgress: p => onProgress(p.frac, p.best, 1), abort: () => app.abort, material: mat.key }).then(resolve, reject);
-      }
+        w.onerror = err => {
+          broken = true;
+          if (!firstErr) firstErr = new Error((err && err.message) || 'worker hatası');
+          console.error('worker hata', err && err.message);
+          settle(i);
+        };
+        try { w.postMessage({ items: mat.items, params: Object.assign({}, P, { seed: seed0 + i * 7919 }), timeMs }); }
+        catch (e) { broken = true; if (!firstErr) firstErr = e; settle(i); }
+      });
     });
   }
 
@@ -2046,36 +2435,72 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const params = readParams();
     const mats = app.mats.filter(m => m.cfg.on);
     if (!mats.length) { toast('Optimize edilecek parça seçilmedi.'); return; }
+    refreshItemMeta();
     app.running = true; app.abort = false; app.results = [];
     $('runBtn').disabled = true; $('stopBtn').hidden = false;
     $('sec-results').hidden = true;
+    clearNotes();
     const prog = $('progress'); prog.innerHTML = '';
     const lines = mats.map(m => {
       const div = document.createElement('div'); div.className = 'pline';
-      div.innerHTML = `<div>${esc(m.sheetName)} <span class="hint">${m.items.length} poz · demet ${m.cfg.bundle}</span></div><div class="pbar"><div></div></div><div class="hint">bekliyor</div>`;
+      div.innerHTML = `<div>${esc(m.sheetName)} <span class="hint">${m.items.length} poz · demet ${m.cfg.bundle}</span></div><div class="pbar"><div></div></div><div>bekliyor</div>`;
       prog.appendChild(div); return div;
     });
     const t0 = performance.now();
-    try {
-      for (let i = 0; i < mats.length; i++) {
-        if (app.abort) break;
-        const m = mats[i];
-        const P = { L: m.cfg.L, kerf: params.kerf, safety: params.safety, maxBundle: m.cfg.bundle || 1, wCut: params.wCut, wBar: params.wBar, wChange: params.wChange, wKalan: params.wKalan, mergeSameLength: params.mergeSameLength, multiStep: params.multiStep, allowSplit: params.allowSplit };
-        const bar = lines[i].querySelector('.pbar > div'), txt = lines[i].children[2];
-        const res = await optimizeMaterial(m, P, params.timeMs, (frac, best, n) => { bar.style.width = (frac * 100).toFixed(0) + '%'; txt.textContent = `${(frac * 100).toFixed(0)}% · en iyi maliyet ${isFinite(best) ? Math.round(best) : '–'} · ${n} paralel`; });
+    const failed = [];
+    // Bir malzemedeki hata diğerlerini iptal etmesin: her malzeme kendi try'ında
+    for (let i = 0; i < mats.length; i++) {
+      if (app.abort) { lines[i].children[2].textContent = 'durduruldu'; continue; }
+      const m = mats[i];
+      const P = { L: m.cfg.L, kerf: params.kerf, safety: params.safety, maxBundle: m.cfg.bundle || 1, wCut: params.wCut, wBar: params.wBar, wChange: params.wChange, wKalan: params.wKalan, mergeSameLength: params.mergeSameLength, multiStep: params.multiStep, allowSplit: params.allowSplit };
+      const bar = lines[i].querySelector('.pbar > div'), txt = lines[i].children[2];
+      const paint = rafThrottle((frac, best, n) => {
+        bar.style.width = (frac * 100).toFixed(0) + '%';
+        txt.textContent = `${(frac * 100).toFixed(0)}% · en iyi maliyet ${isFinite(best) ? Math.round(best) : '–'} · ${n} paralel`;
+      });
+      try {
+        const res = await optimizeMaterial(m, P, params.timeMs, paint);
         bar.style.width = '100%';
-        txt.textContent = `tamam · ${res.stats.bars} çubuk · ${res.stats.strokes} kesim · fire %${(res.stats.wastePct * 100).toFixed(1)}`;
+        txt.textContent = `tamam · ${fmt(res.stats.bars)} çubuk · ${fmt(res.stats.strokes)} kesim · fire %${(res.stats.wastePct * 100).toFixed(1)}`;
         app.results.push({ mat: m, result: res });
+        reportMaterialNotes(m, res);
+      } catch (e) {
+        console.error(e);
+        bar.style.width = '0%';
+        txt.textContent = 'yapılamadı';
+        failed.push({ mat: m, err: e });
+        const isFit = e && e.code === 'TOO_LONG';
+        addNote('bad', `${m.sheetName}: optimize edilemedi`,
+          `<div>${esc(e && e.message || String(e))}</div>`
+          + (isFit ? '<div class="hint" style="margin-top:6px">Çözüm: bu parçanın çubuk boyunu yükseltin ya da bu pozları listeden çıkarın.</div>' : ''));
       }
-    } catch (e) {
-      console.error(e); toast('Hata: ' + e.message, 6000);
     }
     app.running = false; $('runBtn').disabled = false; $('stopBtn').hidden = true;
+    updateRunHint();
     if (app.results.length) {
       $('resHint').textContent = `${((performance.now() - t0) / 1000).toFixed(0)} sn`;
       renderResults();
       $('sec-results').hidden = false;
-      $('sec-results').scrollIntoView({ behavior: 'smooth' });
+      if (!failed.length) $('sec-results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (failed.length) {
+      toast(`${failed.length} parça optimize edilemedi — ayrıntı için uyarılara bakın.`, 6000);
+    }
+  }
+
+  /** Optimizasyondan sonra kullanıcıyı ilgilendiren durumlar (zorunlu bölme, atlanan satır) */
+  function reportMaterialNotes(m, res) {
+    const fs = res.forcedSplits || [];
+    if (fs.length) {
+      const list = fs.slice(0, 6).map(f => `poz ${esc(f.item.poz)}: ${f.count} adet → ${f.pieces} demet (en çok ${f.chunk})`);
+      addNote('warn', `${m.sheetName}: ${fs.length} poz zorunlu olarak bölündü`,
+        `<div class="hint">Bu pozların adedi tek demette kesilemeyecek kadar büyük (adım sayısı × ölçü çubuğa sığmıyor), bu yüzden ayrı demetlere dağıtıldı.</div>`
+        + `<ul>${list.map(x => '<li>' + x + '</li>').join('')}</ul>`
+        + (fs.length > 6 ? `<div class="hint">… ve ${fs.length - 6} poz daha</div>` : ''));
+    }
+    const sk = res.skipped || [];
+    if (sk.length) {
+      addNote('warn', `${m.sheetName}: ${sk.length} satır ölçüsüz/adetsiz olduğu için atlandı`,
+        `<div class="hint">${esc(sk.slice(0, 8).map(it => 'poz ' + it.poz).join(', '))}${sk.length > 8 ? ' …' : ''}</div>`);
     }
   }
 
@@ -2084,6 +2509,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (app.running) return;
     const mats = app.mats.filter(m => m.cfg.on);
     if (!mats.length) { toast('Önce dosya yükleyip parça seçin.'); return; }
+    refreshItemMeta();
     const mat = mats.slice().sort((a, b) => b.pieces - a.pieces)[0];
     const params = readParams();
     const cur = currentWeights();
@@ -2185,6 +2611,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return `<details><summary>Artık planı (KALANLAR hangi artıktan kesilir)</summary><table class="g" style="margin-top:8px"><thead><tr><th style="text-align:left">Kaynak</th><th>Artık</th><th style="text-align:left">Kesimler</th><th>Kalan</th></tr></thead><tbody>${rows}</tbody></table></details>`;
   }
   function renderResults() {
+    app.showAllGroups = false; app.shownTab = -1;
     const tabs = $('tabs'); tabs.innerHTML = '';
     app.results.forEach((x, i) => {
       const b = document.createElement('button'); b.textContent = `${x.mat.sheetName}${x.mat.color && !x.mat.sheetName.includes(x.mat.color) ? ' · ' + x.mat.color : ''}`;
@@ -2192,7 +2619,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     showResult(0);
   }
+  const GROUP_PAGE = 60;          // tek seferde çizilen en fazla grup
   function showResult(i) {
+    if (app.shownTab !== i) { app.showAllGroups = false; app.shownTab = i; }
     $('tabs').querySelectorAll('button').forEach((b, j) => b.classList.toggle('active', j === i));
     const x = app.results[i], res = x.result, st = res.stats;
     const v = res.validation;
@@ -2204,12 +2633,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       ['Grup', st.groupCount, `${res.items.length} poz · ${fmt(st.pieces)} parça`],
       ['KALANLAR', st.kalanCount, st.fallbackBars ? `+${st.fallbackBars} yeni çubuk` : 'artıktan'],
     ].map(([k, val, s]) => `<div class="stat"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${s}</div></div>`).join('');
-    const groups = res.groups.map(g => renderGroup(g)).join('') + (res.kalan.fallbackGroups || []).map(g => renderGroup(g)).join('') + renderKalan(res);
+    // Durum rengi tek başına anlam taşımaz: ikon + yazı birlikte verilir
+    const valid = `<div class="valid ${v.ok ? 'ok' : 'bad'}"><span class="ico">${v.ok ? '✔' : '✖'}</span><span>${v.ok
+      ? 'Doğrulama tamam — her pozun adedi eksiksiz, hiçbir çubuk boyu aşılmadı, demet sınırı korundu.'
+      : 'Doğrulama hataları: ' + esc(v.errors.slice(0, 5).join(' | '))}</span></div>`;
+    const all = res.groups.concat(res.kalan.fallbackGroups || []);
+    // Binlerce satırı tek seferde DOM'a basmak sayfayı kilitler; önce ilk GROUP_PAGE grup
+    const shown = app.showAllGroups ? all.length : Math.min(all.length, GROUP_PAGE);
+    const groups = all.slice(0, shown).map(g => renderGroup(g)).join('') + renderKalan(res);
+    const more = shown < all.length
+      ? `<div class="moregroups"><button class="ghost" id="moreBtn" type="button">Kalan ${fmt(all.length - shown)} grubu da göster</button></div>` : '';
     $('resBody').innerHTML = `<div class="stats">${stats}</div>
-      <div class="valid ${v.ok ? 'ok' : 'bad'}">${v.ok ? '✔ Doğrulama: her pozun adedi tam, hiçbir çubuk boyu aşılmadı, demet sınırı korundu.' : '✖ Doğrulama hataları: ' + esc(v.errors.slice(0, 5).join(' | '))}</div>
-      <div class="cmp">Maliyet ${Math.round(st.cost)} (başlangıç ${Math.round(res.initialCost)}) · ${fmt(res.iterations)} iterasyon · ${esc(x.mat.desc)} ${esc(x.mat.color)}</div>
+      ${valid}
+      <div class="cmp">Maliyet ${fmt(Math.round(st.cost))} (başlangıç ${fmt(Math.round(res.initialCost))}) · ${fmt(res.iterations)} iterasyon · ${esc(x.mat.desc)} ${esc(x.mat.color)}</div>
       <div class="breakdown">${costBreakdown(res)}</div>
-      <div class="groups" style="margin-top:10px">${groups}</div>${renderPlan(res)}`;
+      <div class="groups" style="margin-top:10px">${groups}</div>${more}${renderPlan(res)}`;
+    const mb = $('moreBtn');
+    if (mb) mb.addEventListener('click', () => { app.showAllGroups = true; showResult(i); });
   }
 
   function costBreakdown(res) {
@@ -2227,6 +2667,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // ---------------------------------------------------------------- Excel
   async function downloadExcel() {
     if (!app.results.length) return;
+    refreshItemMeta();
     const showRemnants = $('oRemnantNote').checked;
     const results = app.results.map(x => ({
       result: x.result,
@@ -2255,10 +2696,32 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
 
   // ---------------------------------------------------------------- olaylar
+  // Tema: sistem → açık → koyu sırayla döner, seçim hatırlanır
+  function initTheme() {
+    const btn = $('themeBtn');
+    if (!btn) return;
+    const FACE = { auto: ['◐', 'Tema: sistem (tıkla: açık)'], light: ['☀', 'Tema: açık (tıkla: koyu)'], dark: ['☾', 'Tema: koyu (tıkla: sistem)'] };
+    let cur = lsGet('panjur.theme', 'auto');
+    if (!FACE[cur]) cur = 'auto';
+    const apply = () => {
+      if (cur === 'auto') document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', cur);
+      btn.textContent = FACE[cur][0];
+      btn.title = FACE[cur][1]; btn.setAttribute('aria-label', FACE[cur][1]);
+    };
+    apply();
+    btn.addEventListener('click', () => {
+      cur = cur === 'auto' ? 'light' : cur === 'light' ? 'dark' : 'auto';
+      lsSet('panjur.theme', cur); apply();
+    });
+  }
+
   function init() {
+    initTheme();
     loadParams();
     const drop = $('drop'), inp = $('fileInput');
     drop.addEventListener('click', () => inp.click());
+    drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inp.click(); } });
     inp.addEventListener('change', () => { addFiles([...inp.files]); inp.value = ''; });
     ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
     ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));

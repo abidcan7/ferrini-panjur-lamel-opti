@@ -282,7 +282,9 @@
   }
 
   function parseWorkbook(wb, fileName) {
-    const sheetName = wb.SheetNames.find(n => /maliyet|imalat/i.test(n)) || wb.SheetNames[0];
+    // Türkçe 'İ' JS'de /i/i ile eşleşmez (İ.toUpperCase() !== I), bu yüzden norm() ile bakılır:
+    // '000000000021542_İmalat' sayfası düz regex'le bulunamıyordu.
+    const sheetName = wb.SheetNames.find(n => /maliyet|imalat/.test(norm(n))) || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
     return fromRows(rows, { sheetName, fileName: fileName || '', orderNo: orderNoFrom(sheetName, fileName) });

@@ -54,6 +54,9 @@
 
   const INFEASIBLE = Object.freeze({ feasible: false, cost: Infinity, steps: [], bars: 0, strokes: 0, changes: 0, remnants: [], perBar: Infinity, cands: [] });
   const EMPTY = Object.freeze({ feasible: true, cost: 0, steps: [], bars: 0, strokes: 0, changes: 0, remnants: [], perBar: 0, leftover: 0, n: 0, cands: [] });
+  // evaluate() sığmayan bir durumda da bu şekli döndürür; böylece buildResult hiçbir alanı eksik bulmaz
+  const NO_KALAN = Object.freeze({ plan: [], strokes: 0, changes: 0, deficit: [], usedMm: 0, fallback: null, cost: 0 });
+  const INFEASIBLE_EVAL = Object.freeze({ cost: Infinity, bars: 0, strokes: 0, changes: 0, kp: NO_KALAN, groupBars: 0, groupStrokes: 0, groupChanges: 0, infeasible: true });
 
   // ---------------------------------------------------------------- grup derleyici
 
@@ -131,6 +134,7 @@
         steps.push({ len: k.len, n: c, alloc });
       }
     }
+    if (!steps.length) return null;          // adedi 0 olan anahtar: adım üretilemez
     steps.sort((a, b) => b.n - a.n || b.len - a.len);
     const bars = steps[0].n;
     let changes = 0, used = 0;
@@ -293,7 +297,7 @@
         const g = this.groups[gi];
         if (g.parts.length === 0) continue;
         const c = g.comp;
-        if (!c.feasible) return { cost: Infinity };
+        if (!c.feasible) return INFEASIBLE_EVAL;
         cost += c.cost; bars += c.bars; strokes += c.strokes; changes += c.changes;
         for (const r of c.remnants) if (r.count > 0 && r.len > 0) pool.push({ count: r.count, len: r.len, group: gi, step: r.afterStep });
       }
@@ -469,7 +473,9 @@
       }
       chosen.add(worst);
     }
-    while (chosen.size < k) chosen.add(nonEmpty[(rng() * nonEmpty.length) | 0]);
+    // küme en çok nonEmpty.length ayrı değer tutabilir; kıskaç olmazsa sonsuz döngü
+    const kk = Math.min(k, nonEmpty.length);
+    while (chosen.size < kk) chosen.add(nonEmpty[(rng() * nonEmpty.length) | 0]);
     const released = [];
     for (const gi of chosen) {
       const g = state.groups[gi];
@@ -638,6 +644,8 @@
         const sib = parts.filter(x => x !== p && x.item === p.item);
         if (!sib.length) return false;
         const q = sib[(rng() * sib.length) | 0];
+        // birleşince tek grupta kesilemeyecek kadar büyürse birleştirme
+        if (p.count + q.count > maxCountPerPart(p.item.len, P)) return false;
         const from = state.loc.get(q.id);
         const to = state.loc.get(p.id);
         remember(from); remember(to);
@@ -666,9 +674,10 @@
     const order = [];
     for (let gi = 0; gi < state.groups.length; gi++) if (state.groups[gi].parts.length) order.push(gi);
     // sıralama: demet büyükten küçüğe, sonra ilk adım ölçüsü uzundan kısaya
+    const firstLen = c => (c.steps.length ? c.steps[0].len : 0);   // sığmayan grupta adım yoktur
     order.sort((a, b) => {
       const ca = state.groups[a].comp, cb = state.groups[b].comp;
-      return cb.bars - ca.bars || cb.steps[0].len - ca.steps[0].len || a - b;
+      return cb.bars - ca.bars || firstLen(cb) - firstLen(ca) || a - b;
     });
     const gIndexOf = new Map();
     order.forEach((gi, i) => gIndexOf.set(gi, i + 1));
@@ -807,14 +816,71 @@
   }
 
   /**
+   * Bir pozun tek bir grupta kesilebilecek en büyük adedi.
+   * Grup = tek demet: bütün adımlar aynı çubuklardan kesilir, yani
+   * adım sayısı × (ölçü + testere payı) çubuğa sığmak zorundadır.
+   * 0 dönerse parça çubuğa hiç sığmıyordur.
+   */
+  function maxCountPerPart(len, P) {
+    const cap = P.L - P.safety;
+    if (!(len > 0) || len + P.kerf > cap) return 0;
+    const maxSteps = Math.floor(cap / (len + P.kerf));          // ≥ 1
+    return P.multiStep ? maxSteps * P.maxBundle : P.maxBundle;
+  }
+
+  /**
+   * items → parça listesi.
+   *  - ölçüsü/adedi geçersiz satırlar ayıklanır (skipped)
+   *  - çubuktan uzun pozlar ayrı bildirilir (tooLong) — çağıran hata vermelidir
+   *  - tek grupta kesilemeyecek kadar büyük pozlar zorunlu olarak bölünür (forced):
+   *    bunlar fiziksel olarak zaten ayrı demetlerdir, birleşik tutmanın karşılığı yoktur
+   */
+  function prepareParts(items, P) {
+    const parts = [], skipped = [], tooLong = [], forced = [];
+    let id = 1;
+    for (const it of items) {
+      const len = Math.round(Number(it.len));
+      const count = Math.round(Number(it.count));
+      if (!isFinite(len) || len <= 0 || !isFinite(count) || count <= 0) { skipped.push(it); continue; }
+      const maxCount = maxCountPerPart(len, P);
+      if (!maxCount) { tooLong.push(it); continue; }
+      if (count > maxCount) forced.push({ item: it, count, chunk: maxCount, pieces: Math.ceil(count / maxCount) });
+      for (let left = count; left > 0;) {
+        const take = Math.min(left, maxCount);
+        parts.push({ id: id++, item: it, count: take });
+        left -= take;
+      }
+    }
+    return { parts, skipped, tooLong, forced };
+  }
+
+  /**
    * items: [{order, customer, poz, len, count, ...}]
    * opts: { iters, timeMs, onProgress(info), chunk }
    */
   async function optimize(items, params, opts) {
     const P = Object.assign({}, DEFAULTS, params || {});
     opts = opts || {};
+    // parametreleri güvenli aralığa çek — bozuk değer sessiz donma/çökme üretmesin
+    P.L = Math.max(1, Math.round(Number(P.L) || DEFAULTS.L));
+    P.kerf = Math.max(0, Number(P.kerf) || 0);
+    P.safety = Math.max(0, Number(P.safety) || 0);
+    P.maxBundle = Math.max(1, Math.round(Number(P.maxBundle) || 1));
+    if (P.safety >= P.L) {
+      const e = new Error(`Emniyet payı (${P.safety} mm) çubuk boyundan (${P.L} mm) küçük olmalı.`);
+      e.code = 'BAD_PARAMS'; throw e;
+    }
     const rng = mulberry32(P.seed >>> 0);
-    const parts = makeParts(items);
+    const prep = prepareParts(items, P);
+    if (prep.tooLong.length) {
+      const usable = P.L - P.safety - P.kerf;
+      const list = prep.tooLong.slice(0, 5).map(it => `poz ${it.poz} (${it.len} mm)`).join(', ');
+      const e = new Error(`${prep.tooLong.length} poz çubuğa sığmıyor: ${list}${prep.tooLong.length > 5 ? ' …' : ''}. `
+        + `${P.L} mm çubuktan testere (${P.kerf} mm) ve emniyet payı (${P.safety} mm) düşünce en fazla ${usable} mm kesilebilir.`);
+      e.code = 'TOO_LONG'; e.items = prep.tooLong;
+      throw e;
+    }
+    const parts = prep.parts;
     const state = new State(parts, P, rng);
     state.nextPartId = parts.length + 1;
     constructInitial(state);
@@ -853,9 +919,11 @@
     result.items = items;
     result.initialCost = init.cost;
     result.iterations = it;
+    result.skipped = prep.skipped;          // ölçüsü/adedi geçersiz satırlar
+    result.forcedSplits = prep.forced;      // demete sığmadığı için bölünmek zorunda kalan pozlar
     result.validation = validate(result);
     return result;
   }
 
-  return { DEFAULTS, compileGroup, planKalan, optimize, validate, makeParts, mulberry32, State, constructInitial, buildResult, KALAN };
+  return { DEFAULTS, compileGroup, planKalan, optimize, validate, makeParts, prepareParts, maxCountPerPart, mulberry32, State, constructInitial, buildResult, KALAN };
 });
