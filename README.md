@@ -88,10 +88,26 @@ dağılımı da yazılır.
 
 ## Excel çıktısı
 
+Kesim sayfaları ofis için değil **tezgâh için** tasarlanmıştır: usta biten kesimin
+komple satırını kalın uçlu marker ile boyar. Buna göre:
+
+- Satır yüksekliği marker darbesi kadardır (~27 pt ≈ 9,5 mm) ve satır araları kalın
+  çizgilidir, darbe komşu satıra taşmaz.
+- Veri satırlarında zemin dolgusu ve gri yazı yoktur; yazı koyu ve kalındır, boyandıktan
+  sonra da okunur. (Zebra gölgelendirme bilerek kullanılmaz: boyanmış satırla karışır.)
+- **ÖLÇÜ** testereye kurulan sayıdır: 18 punto kalın, binlik ayırıcısız (`1894`) — yerel
+  ayara göre nokta/virgül karışması olmaz.
+- Grup başlığındaki **ÇUBUK** adedi demet kurulum talimatıdır, iri ve ayrı hücrededir.
+- A4 dikey, yan yana iki grup sütunu; bir grup kutusu sayfa ortasından **bölünmez**.
+- Tek proje varsa sipariş/müşteri sayfa başlığına taşınır ve satırlardan kalkar; birden
+  fazla proje birleştirilmişse satırda sipariş no durur, müşteri karşılıkları başlıkta
+  listelenir. Başlık bandı her sayfada tekrar eder.
+
 | Sayfa | İçerik |
 |---|---|
-| LAMEL / DİKME / ALT PARÇA / TAMBUR … | Gruplar (POZ · ADET · ÖLÇÜ, `=SUM` satırı, çubuk/kesim notları), sonda KALANLAR. Sağ üstte proje bloğu. Dikme ve tekli parçalar iki sütunlu. Aynı türden birden fazla renk varsa sayfa adına renk eklenir. |
+| LAMEL / DİKME / ALT PARÇA / TAMBUR … | Kesim listesi: her grup için `# · ÖLÇÜ · POZ · ADET · AÇIKLAMA`, `=SUM` satırı ve kalan boy; sonda KALANLAR. Aynı türden birden fazla renk varsa sayfa adına renk eklenir. |
 | ÖZET | Parça başına çubuk boyu, demet, çubuk, alt sınır, fire %, kesim, demet bozma, grup, KALANLAR; parametreler ve projeler. |
+| (ofis sayfaları) | ÖZET / POZ LİSTESİ / ARTIK PLANI yatay A4'e sığdırılır, başlık satırı her sayfada tekrar eder. |
 | POZ LİSTESİ | Her pozun hangi grupta kesildiği (filtrelenebilir). |
 | ARTIK PLANI | KALANLAR için artık demeti → kesim eşleşmesi. |
 

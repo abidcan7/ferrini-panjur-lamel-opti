@@ -619,7 +619,7 @@
     const results = app.results.map(x => ({
       result: x.result,
       meta: { desc: x.mat.desc, color: x.mat.color, sheetName: x.mat.sheetName, orders: dedupeOrders(x.mat.orders) },
-      opts: { twoColumn: (x.result.P.maxBundle || 1) <= 2, showRemnants },
+      opts: { showRemnants },
     }));
     const allOrders = dedupeOrders(app.files.map(f => ({ orderNo: f.orderNo, customer: f.customer, date: f.date, note: f.note })));
     try {

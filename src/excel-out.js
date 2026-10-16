@@ -1,6 +1,17 @@
 /*
- * Sonuç Excel'i (ExcelJS gerektirir). Düzen, elle yapılan örnek dosyayla aynı:
- *   A: sipariş no, B: müşteri, C: POZ, D: ADET, E: ÖLÇÜ, F: not; sağ üstte sipariş bloğu.
+ * Sonuç Excel'i (ExcelJS gerektirir).
+ *
+ * Düzen kesim ustası içindir, ofis için değil:
+ *   - Usta biten kesimin KOMPLE SATIRINI kalın uçlu marker ile boyar. Bu yüzden
+ *     satırlar marker darbesi yüksekliğinde (~27 pt ≈ 9,5 mm), aralarında kalın
+ *     çizgi var (darbe komşu satıra taşmasın) ve veri satırlarında hiç zemin
+ *     dolgusu / gri yazı yok — boyandıktan sonra da okunabilsin diye yazı koyu.
+ *   - ÖLÇÜ testereye kurulan sayıdır: en büyük punto, kalın.
+ *   - Grup başlığındaki ÇUBUK adedi demet kurulum talimatıdır: iri ve ayrı hücre.
+ *   - A4 dikey, yan yana iki grup sütunu; bir grup kutusu sayfa ortasından bölünmez.
+ *   - Tek proje varsa sipariş/müşteri sayfa başlığına taşınır, satırlardan kalkar;
+ *     birden fazla proje varsa satırda yalnız sipariş no durur, müşteri karşılığı
+ *     sayfa başlığında listelenir.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('exceljs'));
@@ -8,10 +19,23 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (ExcelJS) {
   'use strict';
 
-  const THIN = { style: 'thin', color: { argb: 'FF000000' } };
-  const BORDER = { top: THIN, left: THIN, bottom: THIN, right: THIN };
   const FONT = 'Calibri';
+  const THIN = { style: 'thin', color: { argb: 'FF000000' } };
+  const MED = { style: 'medium', color: { argb: 'FF000000' } };
+  const BORDER = { top: THIN, left: THIN, bottom: THIN, right: THIN };
   const GRAY = { name: FONT, size: 9, color: { argb: 'FF666666' } };
+  const HEAD_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDDDDD' } };
+  const KALAN_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBFBFBF' } };
+
+  // --- kesim listesi ölçüleri (punto) ---
+  const H_TITLE = 26;   // grup başlığı
+  const H_HEAD = 15;    // sütun başlığı
+  const H_STEP = 27;    // kesim satırı — marker darbesi bu yüksekliğe sığar
+  const H_SUM = 17;     // grup toplamı
+  const H_GAP = 10;     // gruplar arası boşluk
+  // A4 dikey yazdırılabilir yükseklik (11,69" − 2×0,3" kenar) punto cinsinden,
+  // sayfa başlığı bandı ve %8 emniyet payı düşülmüş hâli
+  const PAGE_H = (11.69 - 0.7) * 72 - 59 - 20;   // A4 dikey − kenar − başlık bandı − emniyet
 
   function joinUnique(arr) {
     const seen = [];
@@ -23,7 +47,12 @@
     return s.replace(/[\[\]:*?/\\]/g, ' ').trim().slice(0, 31) || 'Sayfa';
   }
 
-  // Bir adımı satır verisine çevirir
+  function numOrText(v) {
+    if (v === '' || v == null) return null;
+    return isFinite(Number(v)) ? Number(v) : v;
+  }
+
+  // Bir adımı satır verisine çevirir (arayüz de bunu kullanır)
   function stepRow(step) {
     const orders = step.alloc.map(a => a.item.order || '');
     const customers = step.alloc.map(a => a.item.customer || '');
@@ -31,9 +60,8 @@
     const counts = step.alloc.map(a => a.count);
     const single = step.alloc.length === 1;
     const uo = joinUnique(orders), uc = joinUnique(customers);
-    const numOrNull = v => v === '' ? null : (isFinite(Number(v)) ? Number(v) : v);
     return {
-      order: uo.includes(' + ') ? uo : numOrNull(uo),
+      order: uo.includes(' + ') ? uo : numOrText(uo),
       customer: uc,
       poz: single ? (isFinite(Number(pozs[0])) ? Number(pozs[0]) : pozs[0]) : pozs.join(' + '),
       count: single ? counts[0] : counts.join(' + '),
@@ -41,135 +69,303 @@
     };
   }
 
-  // Grup bloğunu satır listesi olarak üretir: [{cells: {A..F}, kind}]
+  // ---------------------------------------------------------------- blok üretimi
+
+  /** Bir grubu satır listesine çevirir. */
   function groupBlock(g, opts) {
     const rows = [];
-    const title = g.fallback ? `GRUP ${g.no} (artık yetmedi – yeni çubuk)` : `GRUP ${g.no}`;
-    rows.push({ kind: 'header', A: title });
+    rows.push({
+      kind: 'gtitle',
+      title: g.fallback ? `GRUP ${g.no}  (artık yetmedi)` : `GRUP ${g.no}`,
+      bars: g.bars,
+      sub: `${g.strokes} kesim` + (g.changes ? ` · ${g.changes} demet bozma` : ''),
+    });
+    rows.push({ kind: 'ghead' });
     g.steps.forEach((s, i) => {
       const r = stepRow(s);
-      let note = '';
-      if (i === 0) note = `${g.bars} çubuk`;
-      else if (s.setAside > 0) note = `${s.setAside} çubuk kenara → ${s.n}`;
-      rows.push({ kind: 'step', A: r.order, B: r.customer, C: r.poz, D: r.count, E: r.len, F: note });
+      rows.push({
+        kind: 'step', sira: i + 1, len: r.len, count: r.count, poz: r.poz, order: r.order,
+        note: s.setAside > 0 ? `${s.setAside} çubuk kenara → ${s.n}` : '',
+        setAside: s.setAside > 0,
+      });
     });
-    const remnantNote = (g.remnants || []).filter(r => !r.final && r.count > 0).map(r => `${r.count}×${r.len}`).join(', ');
-    rows.push({ kind: 'sum', steps: g.steps.length, value: g.sumLen, F: `${g.strokes} kesim` + (remnantNote && opts.showRemnants ? ` · artık ${remnantNote}` : '') });
-    rows.push({ kind: 'blank' });
+    const rem = (g.remnants || []).filter(r => !r.final && r.count > 0).map(r => `${r.count}×${r.len}`).join(', ');
+    rows.push({
+      kind: 'gsum', steps: g.steps.length, value: g.sumLen,
+      note: `kalan ${g.leftover} mm` + (rem && opts.showRemnants ? ` · artık ${rem}` : ''),
+    });
+    rows.push({ kind: 'gap' });
     return rows;
   }
 
+  /** KALANLAR: artık demetlerinden kesilecek pozlar. */
   function kalanBlock(kalan) {
     const rows = [];
     if (!kalan.parts.length) return rows;
-    rows.push({ kind: 'kalanTitle' });
-    rows.push({ kind: 'header', A: '' });
-    // kaynak notu: hangi gruptan kaç parça
     const src = new Map();
     for (const e of kalan.plan) for (const s of e.steps) {
-      const key = s.part.id;
-      const m = src.get(key) || new Map();
+      const m = src.get(s.part.id) || new Map();
       m.set(e.groupNo, (m.get(e.groupNo) || 0) + s.n);
-      src.set(key, m);
+      src.set(s.part.id, m);
     }
-    for (const k of kalan.parts) {
+    rows.push({ kind: 'ktitle', count: kalan.parts.length });
+    rows.push({ kind: 'ghead' });
+    kalan.parts.forEach((k, i) => {
       const m = src.get(k.part.id);
-      const note = m ? 'artık: ' + [...m.entries()].map(([g, n]) => `G${g} (${n})`).join(' + ') : '';
       const it = k.item;
-      rows.push({ kind: 'step', A: isFinite(Number(it.order)) ? Number(it.order) : it.order, B: it.customer, C: isFinite(Number(it.poz)) ? Number(it.poz) : it.poz, D: k.count, E: it.len, F: note });
-    }
+      rows.push({
+        kind: 'step', sira: i + 1, len: it.len, count: k.count,
+        poz: numOrText(it.poz), order: numOrText(it.order),
+        note: m ? 'artık: ' + [...m.keys()].slice(0, 3).map(g => `G${g}`).join('+') + (m.size > 3 ? ' …' : '') : '',
+      });
+    });
+    rows.push({ kind: 'gap' });
     return rows;
   }
 
-  function writeRows(ws, rows, colOffset, startRow, styleOpts) {
-    // colOffset: 0 → A..F, 6 → G..L
-    const col = i => colOffset + i; // 1-based
-    let r = startRow;
-    let blockStart = null;
+  function blockHeight(rows) {
+    let h = 0;
+    for (const r of rows) {
+      if (r.kind === 'gtitle' && r.sub) h += H_HEAD;     // başlık altı özet satırı
+      h += r.kind === 'gtitle' || r.kind === 'ktitle' ? H_TITLE
+        : r.kind === 'ghead' ? H_HEAD
+        : r.kind === 'step' ? H_STEP
+        : r.kind === 'gsum' ? H_SUM : H_GAP;
+    }
+    return h;
+  }
+
+  // ---------------------------------------------------------------- yazım
+
+  /**
+   * Sütun düzeni. multi=true ise satırda sipariş no sütunu da var.
+   * [anahtar, genişlik] — blok içi sıra.
+   */
+  function columns(multi) {
+    // genişlikler punto büyüklüğüne göre: ÖLÇÜ 18 pt, ADET 14 pt, POZ 12 pt
+    return multi
+      ? [['sira', 4], ['len', 10], ['poz', 11], ['count', 11], ['order', 7], ['note', 11]]
+      : [['sira', 4], ['len', 10], ['poz', 12], ['count', 11], ['note', 13]];
+  }
+
+  function setWidths(ws, cols) {
+    const n = cols.length;
+    for (let blk = 0; blk < 2; blk++) {
+      for (let i = 0; i < n; i++) ws.getColumn(blk * (n + 1) + i + 1).width = cols[i][1];
+    }
+    ws.getColumn(n + 1).width = 2;                 // bloklar arası boşluk sütunu
+  }
+
+  function rowHeight(ws, r, h) {
+    const row = ws.getRow(r);
+    if (!row.height || row.height < h) row.height = h;   // iki sütun aynı satırı paylaşır
+  }
+
+  const LABEL = { sira: '#', len: 'ÖLÇÜ', count: 'ADET', poz: 'POZ', order: 'SİPARİŞ', note: 'AÇIKLAMA' };
+
+  /** Bir bloğu (satır listesi) verilen sütun kaymasında ve satırdan başlayarak yazar. */
+  function writeBlock(ws, rows, cols, colOffset, startRow) {
+    const n = cols.length;
+    const col = i => colOffset + i + 1;               // 1 tabanlı
+    let r = startRow, blockStart = null;
     for (const row of rows) {
-      if (row.kind === 'header') {
-        blockStart = r + 1;
-        if (row.A) { const c = ws.getCell(r, col(1)); c.value = row.A; c.font = { name: FONT, size: 10, bold: true }; }
-        for (const [i, t] of [[3, 'POZ'], [4, 'ADET'], [5, 'ÖLÇÜ']]) {
-          const c = ws.getCell(r, col(i)); c.value = t; c.font = { name: FONT, size: 11, bold: true }; c.alignment = { horizontal: 'right' };
+      if (row.kind === 'gtitle' || row.kind === 'ktitle') {
+        rowHeight(ws, r, H_TITLE);
+        const isK = row.kind === 'ktitle';
+        if (isK) {
+          // KALANLAR: demet hücresi yok, başlık tüm genişliğe yayılır
+          ws.mergeCells(r, col(0), r, col(n - 1));
+          const t = ws.getCell(r, col(0));
+          t.value = `KALANLAR — ${row.count} poz, artıklardan kesilecek`;
+          t.font = { name: FONT, size: 13, bold: true };
+          t.alignment = { vertical: 'middle' };
+          t.fill = KALAN_FILL;
+        } else {
+          // başlık: ilk sütunlar birleşik, en sağda demet (çubuk) adedi
+          ws.mergeCells(r, col(0), r, col(n - 3));
+          const t = ws.getCell(r, col(0));
+          t.value = row.title;
+          t.font = { name: FONT, size: 13, bold: true };
+          t.alignment = { vertical: 'middle' };
+          t.fill = HEAD_FILL;
+          ws.mergeCells(r, col(n - 2), r, col(n - 1));
+          const b = ws.getCell(r, col(n - 2));
+          b.value = `${row.bars} ÇUBUK`;
+          b.font = { name: FONT, size: 15, bold: true };
+          b.alignment = { horizontal: 'right', vertical: 'middle' };
+          b.fill = HEAD_FILL;
         }
-      } else if (row.kind === 'step') {
-        const vals = [row.A, row.B, row.C, row.D, row.E];
-        vals.forEach((v, i) => {
-          const c = ws.getCell(r, col(i + 1));
-          c.value = v == null ? null : v;
-          c.border = BORDER;
-          c.font = i === 4 ? { name: FONT, size: 14, bold: true } : { name: FONT, size: 11 };
-          if (i === 4) c.numFmt = '#,##0';
-          if (i >= 2) c.alignment = { horizontal: 'right' };
+        for (let i = 0; i < n; i++) {
+          const c = ws.getCell(r, col(i));
+          c.border = { top: MED, bottom: THIN, left: i === 0 ? MED : undefined, right: i === n - 1 ? MED : undefined };
+        }
+        r++;
+        // alt satır: kesim/bozma özeti
+        if (!isK && row.sub) {
+          rowHeight(ws, r, H_HEAD);
+          ws.mergeCells(r, col(0), r, col(n - 1));
+          const s = ws.getCell(r, col(0));
+          s.value = row.sub; s.font = GRAY;
+          s.border = { left: MED, right: MED };
+          r++;
+        }
+      } else if (row.kind === 'ghead') {
+        rowHeight(ws, r, H_HEAD);
+        blockStart = r + 1;
+        cols.forEach(([k], i) => {
+          const c = ws.getCell(r, col(i));
+          c.value = LABEL[k];
+          c.font = { name: FONT, size: 9, bold: true, color: { argb: 'FF444444' } };
+          c.alignment = { horizontal: k === 'note' ? 'left' : 'center' };
+          c.border = { bottom: MED, left: i === 0 ? MED : undefined, right: i === n - 1 ? MED : undefined };
         });
-        if (row.F) { const c = ws.getCell(r, col(6)); c.value = row.F; c.font = GRAY; }
-      } else if (row.kind === 'sum') {
-        const c = ws.getCell(r, col(5));
-        const colLetter = ws.getColumn(col(5)).letter;
-        c.value = { formula: `SUM(${colLetter}${blockStart}:${colLetter}${r - 1})`, result: row.value };
-        c.numFmt = '#,##0'; c.border = BORDER; c.font = { name: FONT, size: 11, bold: true };
-        if (row.F) { const f = ws.getCell(r, col(6)); f.value = row.F; f.font = GRAY; }
-      } else if (row.kind === 'kalanTitle') {
-        const c = ws.getCell(r, col(2)); c.value = 'KALANLAR'; c.font = { name: FONT, size: 12, bold: true };
+        r++;
+      } else if (row.kind === 'step') {
+        rowHeight(ws, r, H_STEP);
+        cols.forEach(([k], i) => {
+          const c = ws.getCell(r, col(i));
+          c.value = row[k] == null || row[k] === '' ? null : row[k];
+          // Satır marker ile boyanacak: yazı koyu ve kalın kalmalı, zemin dolgusu olmamalı
+          c.font = k === 'len' ? { name: FONT, size: 18, bold: true }
+            : k === 'count' ? { name: FONT, size: 14, bold: true }
+            : k === 'note' ? { name: FONT, size: 9, bold: !!row.setAside }
+            : k === 'sira' ? { name: FONT, size: 10, color: { argb: 'FF777777' } }
+            : { name: FONT, size: 12 };
+          if (k === 'len') c.numFmt = '0';
+          c.alignment = {
+            vertical: 'middle',
+            horizontal: k === 'note' ? 'left' : k === 'poz' ? 'center' : k === 'sira' ? 'center' : 'right',
+            wrapText: k === 'note',
+          };
+          // kalın yatay çizgiler: marker darbesi kendi şeridinde kalsın
+          c.border = {
+            top: MED, bottom: MED,
+            left: i === 0 ? MED : THIN,
+            right: i === n - 1 ? MED : THIN,
+          };
+        });
+        r++;
+      } else if (row.kind === 'gsum') {
+        rowHeight(ws, r, H_SUM);
+        const li = cols.findIndex(([k]) => k === 'len');
+        const letter = ws.getColumn(col(li)).letter;
+        const c = ws.getCell(r, col(li));
+        c.value = { formula: `SUM(${letter}${blockStart}:${letter}${r - 1})`, result: row.value };
+        c.numFmt = '0';
+        c.font = { name: FONT, size: 11, bold: true };
+        c.alignment = { horizontal: 'right' };
+        const ni = cols.findIndex(([k]) => k === 'note');
+        ws.mergeCells(r, col(ni), r, col(n - 1));
+        const nc = ws.getCell(r, col(ni));
+        nc.value = row.note; nc.font = GRAY; nc.alignment = { horizontal: 'left' };
+        for (let i = 0; i < n; i++) {
+          const b = ws.getCell(r, col(i));
+          b.border = { bottom: MED, left: i === 0 ? MED : undefined, right: i === n - 1 ? MED : undefined };
+        }
+        r++;
+      } else {                                   // gap
+        rowHeight(ws, r, H_GAP);
+        r++;
       }
-      r++;
     }
     return r;
   }
 
-  function setWidths(ws, twoCol) {
-    const w = { 1: 7, 2: 12, 3: 7.5, 4: 7, 5: 8, 6: twoCol ? 12 : 22 };
-    for (const [k, v] of Object.entries(w)) ws.getColumn(Number(k)).width = v;
-    if (twoCol) for (const [k, v] of Object.entries(w)) ws.getColumn(Number(k) + 6).width = v;
-    else { ws.getColumn(7).width = 7; ws.getColumn(8).width = 12; ws.getColumn(9).width = 8; ws.getColumn(10).width = 5; ws.getColumn(11).width = 8; }
+  // ---------------------------------------------------------------- sayfa başlığı
+
+  function sheetHeader(ws, res, meta, cols, multi) {
+    const n = cols.length;
+    const lastCol = 2 * n + 1;
+    ws.mergeCells(1, 1, 1, lastCol);
+    const t = ws.getCell(1, 1);
+    t.value = meta.desc + (meta.color ? '  ·  ' + meta.color : '');
+    t.font = { name: FONT, size: 16, bold: true };
+    ws.getRow(1).height = 22;
+
+    // tek proje: sipariş + müşteri başlıkta; çok proje: sipariş→müşteri karşılıkları
+    const o = meta.orders || [];
+    const fmtDate = d => {
+      if (!d) return '';
+      const dt = d instanceof Date ? d : new Date(d);
+      return isNaN(dt) ? '' : `${String(dt.getUTCDate()).padStart(2, '0')}.${String(dt.getUTCMonth() + 1).padStart(2, '0')}.${dt.getUTCFullYear()}`;
+    };
+    const projeText = o.length === 1
+      ? [o[0].orderNo, o[0].customer, fmtDate(o[0].date), o[0].note].filter(Boolean).join('  ·  ')
+      : o.map(x => [x.orderNo, x.customer].filter(Boolean).join(' ') + (x.note ? ' (' + x.note + ')' : '')).join('   |   ');
+    ws.mergeCells(2, 1, 2, lastCol);
+    const p = ws.getCell(2, 1);
+    p.value = (multi ? 'PROJELER:  ' : 'PROJE:  ') + projeText;
+    p.font = { name: FONT, size: 12, bold: true };
+    ws.getRow(2).height = 17;
+
+    const st = res.stats;
+    ws.mergeCells(3, 1, 3, lastCol);
+    const s = ws.getCell(3, 1);
+    s.value = `${st.bars} çubuk × ${res.P.L} mm  ·  ${st.strokes} kesim  ·  ${st.groupCount} grup  ·  demet ${res.P.maxBundle}  ·  testere ${res.P.kerf} mm  ·  fire %${(st.wastePct * 100).toFixed(1).replace('.', ',')}`;
+    s.font = GRAY;
+    ws.getRow(3).height = 14;
+    ws.getRow(4).height = 6;
+    return 5;                                     // bloklar bu satırdan başlar
   }
 
+  // ---------------------------------------------------------------- malzeme sayfası
+
   function materialSheet(wb, res, meta, opts) {
-    const name = safeSheetName(meta.sheetName);
-    const ws = wb.addWorksheet(name, { pageSetup: { orientation: 'portrait', fitToWidth: 1, fitToHeight: 0, paperSize: 9, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } } });
-    const twoCol = !!opts.twoColumn;
-    setWidths(ws, twoCol);
-    ws.getCell('A1').value = meta.desc; ws.getCell('A1').font = { name: FONT, size: 16, bold: true };
-    ws.getRow(1).height = 21;
-    const headCol = 7; // sipariş bloğu G2'den başlar (iki sütunlu düzende sağ sütunun üstünde)
-    ws.getCell(1, headCol).value = meta.color || ''; ws.getCell(1, headCol).font = { name: FONT, size: 12, bold: true };
-    let hr = 2;
-    for (const o of meta.orders) {
-      ws.getCell(hr, headCol).value = isFinite(Number(o.orderNo)) ? Number(o.orderNo) : o.orderNo;
-      ws.getCell(hr, headCol + 1).value = o.customer || '';
-      if (o.date) { ws.getCell(hr, headCol + 2).value = o.date; ws.getCell(hr, headCol + 2).numFmt = 'd-mmm'; }
-      ws.getCell(hr, headCol + 3).value = o.pozCount;
-      ws.getCell(hr, headCol + 4).value = o.note || '';
-      hr++;
-    }
+    const ws = wb.addWorksheet(safeSheetName(meta.sheetName), {
+      pageSetup: {
+        orientation: 'portrait', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        horizontalCentered: true,
+        margins: { left: 0.3, right: 0.3, top: 0.35, bottom: 0.35, header: 0.15, footer: 0.15 },
+      },
+      views: [{ state: 'frozen', ySplit: 4 }],
+    });
+    const multi = (meta.orders || []).length > 1;
+    const cols = columns(multi);
+    setWidths(ws, cols);
+    const startRow = sheetHeader(ws, res, meta, cols, multi);
+
     const blocks = [];
     for (const g of res.groups) blocks.push(groupBlock(g, opts));
     for (const g of res.kalan.fallbackGroups || []) blocks.push(groupBlock(g, opts));
     const kb = kalanBlock(res.kalan);
-    const startRow = 3;
-    if (!twoCol) {
-      let r = Math.max(startRow, hr + 1);
-      for (const b of blocks) r = writeRows(ws, b, 0, r, opts);
-      if (kb.length) r = writeRows(ws, kb, 0, r, opts);
-      ws.pageSetup.printTitlesRow = '1:1';
-      ws.pageSetup.printArea = `A1:K${Math.max(r, hr)}`;
-    } else {
-      const total = blocks.reduce((s, b) => s + b.length, 0) + kb.length;
-      let r1 = startRow, r2 = Math.max(startRow, hr + 1), i = 0, acc = 0;
-      for (; i < blocks.length && acc + blocks[i].length <= total / 2 + 3; i++) { r1 = writeRows(ws, blocks[i], 0, r1, opts); acc += blocks[i].length; }
-      for (; i < blocks.length; i++) r2 = writeRows(ws, blocks[i], 6, r2, opts);
-      if (kb.length) { if (r1 <= r2) r1 = writeRows(ws, kb, 0, r1, opts); else r2 = writeRows(ws, kb, 6, r2, opts); }
-      ws.pageSetup.printTitlesRow = '1:1';
-      ws.pageSetup.printArea = `A1:L${Math.max(r1, r2)}`;
+    if (kb.length) blocks.push(kb);
+
+    // A4 dikey, yan yana iki sütun; bir grup kutusu sayfa ortasından bölünmez
+    const blockCols = cols.length + 1;
+    let rL = startRow, rR = startRow, hL = 0, hR = 0, side = 0, lastRow = startRow;
+    for (const b of blocks) {
+      const bh = blockHeight(b);
+      if (side === 0 && hL > 0 && hL + bh > PAGE_H) { side = 1; }
+      if (side === 1 && hR > 0 && hR + bh > PAGE_H) {
+        const next = Math.max(rL, rR);
+        ws.getRow(next - 1).addPageBreak();        // önceki sayfanın sonu
+        rL = rR = next; hL = hR = 0; side = 0;
+      }
+      if (side === 0) { rL = writeBlock(ws, b, cols, 0, rL); hL += bh; }
+      else { rR = writeBlock(ws, b, cols, blockCols, rR); hR += bh; }
+      lastRow = Math.max(lastRow, rL, rR);
     }
+    ws.pageSetup.printTitlesRow = '1:4';           // başlık bandı her sayfada
+    ws.pageSetup.printArea = `A1:${ws.getColumn(2 * cols.length + 1).letter}${Math.max(lastRow, 5)}`;
     return ws;
+  }
+
+  // ---------------------------------------------------------------- ofis sayfaları
+
+  /** Ofis sayfaları: yatay A4, sütunlar genişliğe sığdırılır, başlık her sayfada. */
+  function officePageSetup(ws, lastCol) {
+    ws.pageSetup = {
+      orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+    };
+    ws.pageSetup.printTitlesRow = '1:1';
+    if (lastCol) ws.pageSetup.printArea = undefined;
   }
 
   function summarySheet(wb, results, meta) {
     const ws = wb.addWorksheet('ÖZET');
     ws.getColumn(1).width = 26; ws.getColumn(2).width = 12;
-    for (let c = 3; c <= 14; c++) ws.getColumn(c).width = 12;
+    for (let c = 3; c <= 16; c++) ws.getColumn(c).width = 12;
     ws.getCell('A1').value = 'KESİM OPTİMİZASYONU – ÖZET'; ws.getCell('A1').font = { name: FONT, size: 14, bold: true };
     ws.getCell('A2').value = 'Oluşturma: ' + new Date().toLocaleString('tr-TR');
     let r = 4;
@@ -190,6 +386,7 @@
     r += 1;
     ws.getCell(r, 1).value = 'Siparişler'; ws.getCell(r, 1).font = { name: FONT, bold: true }; r++;
     for (const o of meta.orders) { ws.getCell(r, 1).value = o.orderNo; ws.getCell(r, 2).value = o.customer; if (o.date) { ws.getCell(r, 3).value = o.date; ws.getCell(r, 3).numFmt = 'dd.mm.yyyy'; } ws.getCell(r, 4).value = o.note || ''; r++; }
+    officePageSetup(ws);
     return ws;
   }
 
@@ -201,14 +398,13 @@
     const rows = [];
     for (const x of results) {
       const res = x.result;
-      const where = new Map(); // item → [{label, count}]
+      const where = new Map();
       const push = (item, label, count) => { const a = where.get(item) || []; a.push({ label, count }); where.set(item, a); };
       for (const g of res.groups.concat(res.kalan.fallbackGroups || [])) for (const s of g.steps) for (const a of s.alloc) push(a.item, `G${g.no}`, a.count);
       for (const e of res.kalan.plan) for (const s of e.steps) push(s.item, `KALANLAR (artık G${e.groupNo})`, s.n);
       for (const d of res.kalan.deficit || []) push(d.item, 'EKSİK', d.count);
       for (const it of res.items) {
         const w = where.get(it) || [];
-        // aynı etiketleri birleştir
         const agg = new Map();
         for (const e of w) agg.set(e.label, (agg.get(e.label) || 0) + e.count);
         const label = [...agg.entries()].map(([l, c]) => agg.size > 1 || c !== it.count ? `${l} (${c})` : l).join(' + ');
@@ -223,6 +419,7 @@
     }));
     ws.views = [{ state: 'frozen', ySplit: 1 }];
     ws.autoFilter = { from: 'A1', to: 'G1' };
+    officePageSetup(ws);
     return ws;
   }
 
@@ -248,11 +445,12 @@
     }
     if (r === 2) ws.getCell(2, 1).value = 'Artıktan kesim yok.';
     ws.views = [{ state: 'frozen', ySplit: 1 }];
+    officePageSetup(ws);
     return ws;
   }
 
   /**
-   * results: [{ result, meta: { desc, color, sheetName, orders: [{orderNo, customer, date, pozCount, note}] }, opts: { twoColumn, showRemnants } }]
+   * results: [{ result, meta: { desc, color, sheetName, orders: [...] }, opts: { showRemnants } }]
    * meta: { orders }
    */
   async function buildWorkbook(results, meta) {
