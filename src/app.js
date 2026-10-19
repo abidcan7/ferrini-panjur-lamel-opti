@@ -132,6 +132,9 @@
       }
     }
     renderFiles();
+    // Havuzu şimdi sına: hem "paralel arama" yazısı doğru olur, hem ilk koşu
+    // worker kurulumunu beklemez. CSP'li sandbox'ta burada "tek çekirdek"e düşer.
+    if (app.files.length) ensurePool().then(updateParHint, updateParHint);
   }
 
   function renderFiles() {
@@ -224,6 +227,15 @@
     }
   }
 
+  // Paralel arama gerçekten kurulabiliyor mu? (CSP'li sandbox'ta worker kapalı olabilir)
+  function updateParHint() {
+    const el = $('parHint');
+    if (!el) return;
+    el.textContent = pool.blocked ? 'tek çekirdek — bu ortamda paralel arama kapalı'
+      : pool.ready ? `${pool.workers.length} paralel arama`
+      : `${workerCount()} paralel arama`;
+  }
+
   function updateRunHint() {
     const on = app.mats.filter(m => m.cfg.on);
     const has = app.files.length > 0 && on.length > 0;
@@ -288,7 +300,7 @@
       try { const r = await fetch(el.src); if (r.ok) src = await r.text(); } catch (e) { /* file:// altında olabilir */ }
     }
     if (!src) return null;
-    app.workerSrc = src + '\n;let __abort = false; self.onmessage = async function (e) { const d = e.data; if (d && d.type === "abort") { __abort = true; return; } try { const res = await PanjurOpt.optimize(d.items, d.params, { timeMs: d.timeMs, yield: true, chunk: 2000, abort: () => __abort, onProgress: p => self.postMessage({ type: "progress", frac: p.frac, best: p.best, iter: p.iter }) }); self.postMessage({ type: "done", result: res }); } catch (err) { self.postMessage({ type: "error", message: String(err && err.message || err), code: String(err && err.code || ""), stack: String(err && err.stack || "") }); } };';
+    app.workerSrc = src + '\n;let __abort = false; self.onmessage = async function (e) { const d = e.data; if (d && d.type === "ping") { self.postMessage({ type: "hello" }); return; } if (d && d.type === "abort") { __abort = true; return; } try { const res = await PanjurOpt.optimize(d.items, d.params, { timeMs: d.timeMs, yield: true, chunk: 2000, abort: () => __abort, onProgress: p => self.postMessage({ type: "progress", frac: p.frac, best: p.best, iter: p.iter }) }); self.postMessage({ type: "done", result: res }); } catch (err) { self.postMessage({ type: "error", message: String(err && err.message || err), code: String(err && err.code || ""), stack: String(err && err.stack || "") }); } };';
     return app.workerSrc;
   }
 
@@ -300,24 +312,45 @@
   // Worker havuzu. Önceden her malzeme için worker'lar yeniden doğuruluyordu;
   // her doğum optimizer kaynağını baştan ayrıştırmak demek (4 malzeme × 8 worker = 32 kez).
   // Havuz bir kez kurulur, malzemeler arasında yeniden kullanılır.
-  const pool = { url: null, workers: [] };
+  const pool = { url: null, workers: [], ready: false, blocked: false };
   function destroyPool() {
     for (const w of pool.workers) { try { w.onmessage = null; w.onerror = null; w.terminate(); } catch (e) { /* yok say */ } }
     pool.workers = [];
+    pool.ready = false;
     if (pool.url) { URL.revokeObjectURL(pool.url); pool.url = null; }
   }
+  /**
+   * Worker havuzunu kurar; kuramazsa null döner (çağıran ana iş parçacığına düşer).
+   *
+   * Önemli: CSP ile korunan bir sandbox'ta (Atlas, Poz Çizer düzeni) `new Worker(blob:…)`
+   * HATA FIRLATMAZ — nesneyi döndürür, reddi `onerror` ile ASENKRON bildirir. Kurulan
+   * worker'ı sınamadan kullanırsak optimizasyon hiç yanıt gelmeyen bir sözde takılır.
+   * Bu yüzden kullanmadan önce el sıkışılır; cevap vermeyen havuz çöpe atılır.
+   */
   async function ensurePool() {
+    if (pool.blocked) return null;
     const want = workerCount();
-    if (pool.workers.length === want && pool.url) return pool;
+    if (pool.ready && pool.workers.length === want) return pool;
     const src = await getWorkerSource();
-    if (!src) return null;
+    if (!src) { pool.blocked = true; return null; }
     destroyPool();
-    pool.url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    try { pool.url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' })); }
+    catch (e) { pool.blocked = true; return null; }
+    const made = [];
     for (let i = 0; i < want; i++) {
-      try { pool.workers.push(new Worker(pool.url)); }
+      try { made.push(new Worker(pool.url)); }
       catch (e) { console.error('worker oluşturulamadı', e); break; }
     }
-    if (!pool.workers.length) { destroyPool(); return null; }
+    const alive = await Promise.all(made.map(w => new Promise(res => {
+      const t = setTimeout(() => res(false), 4000);
+      w.onmessage = e => { if (e.data && e.data.type === 'hello') { clearTimeout(t); res(true); } };
+      w.onerror = () => { clearTimeout(t); res(false); };
+      try { w.postMessage({ type: 'ping' }); } catch (e) { clearTimeout(t); res(false); }
+    })));
+    made.forEach((w, i) => { w.onmessage = null; w.onerror = null; if (!alive[i]) { try { w.terminate(); } catch (e) { /* yok say */ } } });
+    pool.workers = made.filter((w, i) => alive[i]);
+    if (!pool.workers.length) { destroyPool(); pool.blocked = true; return null; }
+    pool.ready = true;
     return pool;
   }
 
@@ -326,9 +359,10 @@
     const seed0 = 1000 + mat.items.length;
     const p = await ensurePool();
     if (!p) {
-      // ana iş parçacığı (yedek yol)
+      // ana iş parçacığı (yedek yol): worker yoksa ya da ortam engelliyorsa
+      updateParHint();
       return PanjurOpt.optimize(mat.items, Object.assign({}, P, { seed: seed0 }),
-        { timeMs, chunk: 1000, onProgress: x => onProgress(x.frac, x.best, 1), abort: () => app.abort, material: mat.key });
+        { timeMs, chunk: 1000, onProgress: x => onProgress(x.frac, x.best, 0), abort: () => app.abort, material: mat.key });
     }
     const workers = p.workers.slice();
     const n = workers.length;
@@ -403,7 +437,7 @@
       const bar = lines[i].querySelector('.pbar > div'), txt = lines[i].children[2];
       const paint = rafThrottle((frac, best, n) => {
         bar.style.width = (frac * 100).toFixed(0) + '%';
-        txt.textContent = `${(frac * 100).toFixed(0)}% · en iyi maliyet ${isFinite(best) ? Math.round(best) : '–'} · ${n} paralel`;
+        txt.textContent = `${(frac * 100).toFixed(0)}% · en iyi maliyet ${isFinite(best) ? Math.round(best) : '–'} · ${n ? n + ' paralel' : 'tek çekirdek'}`;
       });
       try {
         const res = await optimizeMaterial(m, P, params.timeMs, paint);
@@ -679,7 +713,7 @@
     $('cmpBtn').addEventListener('click', compareWeights);
     for (const id of ['wCut', 'wBar', 'wChange', 'wKalan']) $(id).addEventListener('input', renderWeights);
     for (const id of PARAM_IDS.concat(CHECK_IDS)) $(id).addEventListener('change', () => { saveParams(); if (id === 'pL') { renderMaterials(); renderWeights(); } else updateRunHint(); });
-    $('parHint').textContent = `${workerCount()} paralel arama`;
+    updateParHint();
     renderWeights();
     if (new URLSearchParams(location.search).get('debug')) window.__panjur = app;   // tanılama
     // demo: ?demo=1 ile örnek dosyaları (http üzerinden) yükle

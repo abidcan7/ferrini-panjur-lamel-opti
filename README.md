@@ -125,6 +125,53 @@ komple satırını kalın uçlu marker ile boyar. Buna göre:
 Elle yapılmış eski örnekle karşılaştırma (3 proje, 158 lamel pozu): insan 962 boy / 184 kesim /
 ≈%10 fire → araç ≈900 boy / ≈130 kesim / ≈%4 fire.
 
+## Atlas'ta yayınlama
+
+Araç, Atlas'ın (`ferrini-hub/atlas`) **Poz Çizer** düzeniyle yayınlanabilir: kod bu
+depoda kalır, Atlas onu günde bir kez son commit'ten eşitler ve CSP ile korunan,
+opak kökenli bir iframe'de olduğu gibi gösterir. Atlas tarafı küçük bir .NET işidir
+(eşitleme + dosya ucu + ekran, `PozCizerSync.cs` / `PozCizerEndpoints.cs` /
+`components/araclar/PozCizerTool.tsx` kopyası); **aracın kendisi .NET'e çevrilmez,
+React'e taşınmaz.**
+
+Eşitlemenin doğrulama sınırlarına karşı durum (ölçüldü):
+
+| Kural | Sınır | Bu araç |
+|---|---|---|
+| Giriş dosyası | `POZCIZER_ENTRY` ile verilir (Poz Çizer'de `PozCizer.html`) | `PanjurKesim.html`, kökte |
+| Tek dosya boyutu | 8 MB | 1,89 MB |
+| Toplam boyut | 30 MB | 1,89 MB |
+| Dosya sayısı | 200 | 1 (her şey gömülü) |
+| Dış kaynaktan `<script src="https://…">` | yasak, sürümü düşürür | yok |
+| Uzantı | `html js json css png jpg webp svg gif woff woff2 ttf` | `.html` |
+
+Örnek projeler (`.csv`, `.xls`, `.xlsx`) izinli uzantı listesinde olmadığı için
+eşitlemeye girmez; depoda kalmaları sorun değildir.
+
+### Sandbox'ta neler kapalı (Chromium'da ölçüldü)
+
+Atlas her yanıtta `Content-Security-Policy: sandbox allow-scripts allow-modals
+allow-downloads; default-src 'none'; script-src 'self' 'unsafe-inline'; … connect-src 'none'`
+gönderir ve iframe'e `allow-same-origin` **vermez**. Sonuçları:
+
+- **`localStorage` ve çerez `SecurityError` verir.** Parametreler, parça ayarları, tema
+  ve sipariş belleği oturumlar arasında hatırlanmaz. Araç bunu `try/catch` ile karşılar,
+  hata vermez — Poz Çizer'in dil seçiminde olan şeyin aynısı.
+- **Paralel arama kapalı.** `script-src`'de `blob:` olmadığı için `new Worker(blob:…)`
+  reddedilir; opak köken yüzünden aynı kökenli bir `.js` worker'ı da `SecurityError`
+  verir. Araç tek çekirdeğe düşer ve bunu arayüzde yazar ("tek çekirdek — bu ortamda
+  paralel arama kapalı"). Aynı sürede arama daha az yol kat eder; işi değiştirmez,
+  sonuç biraz daha zayıf olabilir — süreyi artırmak bunu kapatır.
+- **Excel indirme çalışır** (`allow-downloads`), dosya okuma ve sürükle-bırak çalışır.
+
+> Atlas tarafında CSP'ye `worker-src 'self' blob:` eklenirse paralel arama geri gelir
+> ve sandbox zayıflamaz (worker da opak kökeni devralır, `connect-src 'none'` onun için
+> de geçerlidir). Gerekli değildir; araç onsuz da çalışır.
+
+Bu koşullar `src/test/atlas-sandbox.md` yerine doğrudan ölçülerek doğrulanmıştır:
+tam CSP başlığıyla sunulan dosya, `allow-same-origin` olmayan bir iframe'de gerçek
+proje ile uçtan uca koşturulmuştur (yükleme → optimizasyon → Excel).
+
 ## Geliştirme
 
 ```
